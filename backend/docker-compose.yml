@@ -1,0 +1,64 @@
+version: '3.8'
+
+services:
+  warenbuchung-api:
+    build:
+      context: ./WarenbuchungApi
+      dockerfile: Dockerfile
+    ports:
+      - "5232:5232"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ASPNETCORE_URLS=http://+:5232
+      - ConnectionStrings__DefaultConnection=Data Source=/app/data/warenbuchung.db
+      - Jwt__Key=YourSecretKeyHere12345678901234567890
+      - Jwt__Issuer=WarenbuchungApi
+      - Jwt__Audience=WarenbuchungApiUsers
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped
+    networks:
+      - warenbuchung-network
+
+networks:
+  warenbuchung-network:
+    driver: bridge
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

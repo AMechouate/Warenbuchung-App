@@ -1,0 +1,97 @@
+## .NET
+backend/**/bin/
+backend/**/obj/
+*.user
+*.suo
+*.cache
+*.dll
+*.exe
+*.pdb
+*.log
+*.vs/
+.vs/
+.vscode/
+
+## Node.js / React Native
+frontend/**/node_modules/
+frontend/**/.expo/
+frontend/**/.expo-shared/
+frontend/**/dist/
+frontend/**/build/
+frontend/**/*.log
+frontend/**/npm-debug.log*
+frontend/**/yarn-debug.log*
+frontend/**/yarn-error.log*
+
+## Build results
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+[Bb]uild/
+[Bb]in/
+[Oo]bj/
+[Ll]og/
+[Ll]ogs/
+
+## Visual Studio
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+## Rider
+.idea/
+*.sln.iml
+
+## User-specific files
+*.rsuser
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+## .NET Core
+project.lock.json
+project.fragment.lock.json
+artifacts/
+
+## NuGet Packages
+*.nupkg
+*.snupkg
+**/packages/*
+!**/packages/build/
+*.nuget.props
+*.nuget.targets
+
+## Environment variables
+.env
+.env.local
+backend/**/appsettings.Development.json
+backend/**/appsettings.Production.json
+
+## Database
+*.db
+*.db-shm
+*.db-wal
+warenbuchung.db
+warenbuchung.db.backup.*
+
+## OS
+.DS_Store
+Thumbs.db
+
+## IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+## Temporary files
+*.tmp
+*.temp
+*.bak
+*.backup
+
