@@ -303,3 +303,5 @@ GROUP BY table_schema;
 - **Datenbank:** MariaDB 11.2.3
 - **Migration:** InitialCreate (20251125124845)
 
+
+

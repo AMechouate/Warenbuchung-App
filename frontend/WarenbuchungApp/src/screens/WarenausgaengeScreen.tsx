@@ -30,7 +30,7 @@ import {
   RadioButton,
   Portal,
   Dialog,
-  Divider,
+  Menu,
 } from 'react-native-paper';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -54,8 +54,14 @@ const WarenausgaengeScreen: React.FC = () => {
   const [lagerort, setLagerort] = useState('');
   const [userLagerort, setUserLagerort] = useState<string>('');
   const [userLocations, setUserLocations] = useState<string[]>([]);
+  const [allLocations, setAllLocations] = useState<string[]>([]);
+  const [vonLagerort, setVonLagerort] = useState('');
+  const [nachLagerort, setNachLagerort] = useState('');
   const [lagerortDialogVisible, setLagerortDialogVisible] = useState(false);
-  const [warenausgangstyp, setWarenausgangstyp] = useState('Rücksendung Lieferant');
+  const [vonLagerortDialogVisible, setVonLagerortDialogVisible] = useState(false);
+  const [nachLagerortDialogVisible, setNachLagerortDialogVisible] = useState(false);
+  const [nachLagerortSearchQuery, setNachLagerortSearchQuery] = useState('');
+  const [warenausgangstyp, setWarenausgangstyp] = useState('Projekt');
   const [referenz, setReferenz] = useState('');
   const [ordersModalVisible, setOrdersModalVisible] = useState(false);
   const [orders, setOrders] = useState<any[]>([]);
@@ -65,9 +71,6 @@ const WarenausgaengeScreen: React.FC = () => {
   const [selectedUnit, setSelectedUnit] = useState('Stück');
   const [productsModalVisible, setProductsModalVisible] = useState(false);
   const [allProducts, setAllProducts] = useState<any[]>([]);
-  const [productSearchQuery, setProductSearchQuery] = useState('');
-  const [productFilter, setProductFilter] = useState<string[]>([]);
-  const [productFilterMenuVisible, setProductFilterMenuVisible] = useState(false);
   const [projectsModalVisible, setProjectsModalVisible] = useState(false);
   const [allProjects, setAllProjects] = useState<any[]>([]);
   const [selectedProject, setSelectedProject] = useState<any>(null);
@@ -77,25 +80,24 @@ const WarenausgaengeScreen: React.FC = () => {
   const [begruendungDialogVisible, setBegruendungDialogVisible] = useState(false);
   const [showBegruendungField, setShowBegruendungField] = useState(false);
   const [auswahlGrundDialogVisible, setAuswahlGrundDialogVisible] = useState(false);
-  const [unitDialogVisible, setUnitDialogVisible] = useState(false);
+  const [unitMenuVisible, setUnitMenuVisible] = useState(false);
   const [scannerVisible, setScannerVisible] = useState(false);
   const [hasPermission, setHasPermission] = useState(false);
-  const [articleSearchTerm, setArticleSearchTerm] = useState('');
-  const [showArticleCard, setShowArticleCard] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [filter, setFilter] = useState<string[]>([]);
-  
-  // States für alle Warenausgangstypen
-  const [ruecksendungSummaryItems, setRuecksendungSummaryItems] = useState<any[]>([]);
-  const [ruecksendungSummarySaving, setRuecksendungSummarySaving] = useState<string | null>(null);
-  const [projektSummaryItems, setProjektSummaryItems] = useState<any[]>([]);
-  const [projektSummarySaving, setProjektSummarySaving] = useState<string | null>(null);
-  const [lagerSummaryItems, setLagerSummaryItems] = useState<any[]>([]);
-  const [lagerSummarySaving, setLagerSummarySaving] = useState<string | null>(null);
-  const [entsorgungSummaryItems, setEntsorgungSummaryItems] = useState<any[]>([]);
-  const [entsorgungSummarySaving, setEntsorgungSummarySaving] = useState<string | null>(null);
   const [lieferant, setLieferant] = useState('');
   const [bemerkung, setBemerkung] = useState('');
+
+  // Form states - Bodybereich (Artikel-Liste)
+  interface WarenausgangItem {
+    id: string;
+    artikelnummer: string;
+    anzahl: string;
+    selectedProduct: any | null;
+    selectedUnit: string;
+  }
+  const [items, setItems] = useState<WarenausgangItem[]>([]);
+  const [productSearchQuery, setProductSearchQuery] = useState('');
+  const [productFilter, setProductFilter] = useState<string[]>(['alle']);
+  const [currentItemIndexForProductSelection, setCurrentItemIndexForProductSelection] = useState<number | null>(null);
 
   // Available reasons
   const [gruende, setGruende] = useState<string[]>(['Kommission', 'Auftrag', 'Umbuchung', 'Beschädigung']);
@@ -111,7 +113,7 @@ const WarenausgaengeScreen: React.FC = () => {
   ]);
   
   // Available attributes
-  const warenausgangstypen = ['Rücksendung Lieferant', 'Projekt', 'Lager', 'Entsorgung'];
+  const warenausgangstypen = ['Projekt', 'Rücksendung Lieferant', 'Lager', 'Entsorgung'];
 
   // Mock-Projekte für die Auswahl
   const mockProjects = [
@@ -191,160 +193,6 @@ const WarenausgaengeScreen: React.FC = () => {
     }
   };
 
-  // Lade Artikel für Referenz bei Warenausgangstyp "Rücksendung Lieferant"
-  const loadRuecksendungItemsForReferenz = useCallback(async (referenzText: string) => {
-    if (warenausgangstyp !== 'Rücksendung Lieferant') {
-      return;
-    }
-
-    const trimmedReferenz = referenzText.trim();
-    if (!trimmedReferenz) {
-      // Wenn Referenz leer ist, lösche geladene Artikel aus ruecksendungSummaryItems
-      setRuecksendungSummaryItems(prev => prev.filter(item => !item.key.startsWith('ruecksendung-ref-')));
-      return;
-    }
-
-    try {
-      // Filtere Warenausgänge nach Referenz (nur Referenz, nicht nach anderen Feldern)
-      const ruecksendungWarenausgaenge = warenausgaenge.filter(w => {
-        if (w.attribut !== 'Rücksendung Lieferant') return false;
-        if (!w.notes) return false;
-        // Extrahiere Referenz aus notes oder verwende orderNumber
-        const referenzMatch = w.notes.match(/Referenz:\s*(.+?)(?:\s*\||$)/);
-        const extractedReferenz = referenzMatch ? referenzMatch[1].trim() : (w.orderNumber || '').trim();
-        return extractedReferenz === trimmedReferenz;
-      });
-
-      // Konvertiere Warenausgänge in ruecksendungSummaryItems (als gespeicherte Artikel)
-      const summaryItemsForReferenz = ruecksendungWarenausgaenge.map((w, index) => {
-        const product = allProducts.find(p => p.id === w.productId);
-        const nowTimestamp = w.createdAt ? new Date(w.createdAt).getTime() : Date.now();
-        
-        return {
-          key: `ruecksendung-ref-${w.id}-${index}`,
-          productId: w.productId,
-          name: product?.name || w.productName || `Artikel ${index + 1}`,
-          unit: product?.unit || 'Stück',
-          quantity: w.quantity,
-          sku: product?.sku,
-          supplier: undefined,
-          type: product?.type,
-          location: undefined,
-          bookingHistory: [],
-          itemType: 'material' as const,
-          lastTimestamp: w.updatedAt ? new Date(w.updatedAt).getTime() : nowTimestamp,
-          lastBookingQuantity: w.quantity,
-          lastBookingUnit: product?.unit || 'Stück',
-          lastBooking: undefined,
-          createdAtTimestamp: nowTimestamp,
-          quantityInput: w.quantity,
-        };
-      });
-
-      // Kombiniere geladene Artikel mit neuen Items (die nicht aus DB geladen wurden)
-      setRuecksendungSummaryItems(prev => {
-        const newItems = prev.filter(item => !item.key.startsWith('ruecksendung-ref-'));
-        return [...summaryItemsForReferenz, ...newItems];
-      });
-    } catch (error) {
-      console.error('Fehler beim Laden der Artikel für Referenz:', error);
-      // Bei Fehler nur neue Items behalten
-      setRuecksendungSummaryItems(prev => prev.filter(item => !item.key.startsWith('ruecksendung-ref-')));
-    }
-  }, [warenausgangstyp, warenausgaenge, allProducts]);
-
-  // Generische Funktion zum Laden von Items für alle Warenausgangstypen
-  const loadItemsForReferenz = useCallback(async (typ: string, referenzText: string) => {
-    if (warenausgangstyp !== typ) {
-      return;
-    }
-
-    const trimmedReferenz = referenzText.trim();
-    const prefix = `${typ.toLowerCase().replace(/\s+/g, '-')}-ref-`;
-    
-    // Setze die entsprechenden States zurück
-    if (typ === 'Projekt') {
-      if (!trimmedReferenz) {
-        setProjektSummaryItems(prev => prev.filter(item => !item.key.startsWith(prefix)));
-        return;
-      }
-    } else if (typ === 'Lager') {
-      if (!trimmedReferenz) {
-        setLagerSummaryItems(prev => prev.filter(item => !item.key.startsWith(prefix)));
-        return;
-      }
-    } else if (typ === 'Entsorgung') {
-      if (!trimmedReferenz) {
-        setEntsorgungSummaryItems(prev => prev.filter(item => !item.key.startsWith(prefix)));
-        return;
-      }
-    }
-
-    try {
-      // Filtere Warenausgänge nach Attribut und Referenz
-      const filteredWarenausgaenge = warenausgaenge.filter(w => {
-        if (w.attribut !== typ) return false;
-        if (!w.notes && !w.orderNumber) return false;
-        const referenzMatch = w.notes?.match(/Referenz:\s*(.+?)(?:\s*\||$)/);
-        const extractedReferenz = referenzMatch ? referenzMatch[1].trim() : (w.orderNumber || '').trim();
-        return extractedReferenz === trimmedReferenz;
-      });
-
-      // Konvertiere Warenausgänge in Summary Items
-      const summaryItemsForReferenz = filteredWarenausgaenge.map((w, index) => {
-        const product = allProducts.find(p => p.id === w.productId);
-        const nowTimestamp = w.createdAt ? new Date(w.createdAt).getTime() : Date.now();
-        
-        return {
-          key: `${prefix}${w.id}-${index}`,
-          productId: w.productId,
-          name: product?.name || w.productName || `Artikel ${index + 1}`,
-          unit: product?.unit || 'Stück',
-          quantity: w.quantity,
-          sku: product?.sku,
-          supplier: undefined,
-          type: product?.type,
-          location: undefined,
-          bookingHistory: [],
-          itemType: 'material' as const,
-          lastTimestamp: w.updatedAt ? new Date(w.updatedAt).getTime() : nowTimestamp,
-          lastBookingQuantity: w.quantity,
-          lastBookingUnit: product?.unit || 'Stück',
-          lastBooking: undefined,
-          createdAtTimestamp: nowTimestamp,
-          quantityInput: w.quantity,
-        };
-      });
-
-      // Aktualisiere die entsprechenden States
-      if (typ === 'Projekt') {
-        setProjektSummaryItems(prev => {
-          const newItems = prev.filter(item => !item.key.startsWith(prefix));
-          return [...summaryItemsForReferenz, ...newItems];
-        });
-      } else if (typ === 'Lager') {
-        setLagerSummaryItems(prev => {
-          const newItems = prev.filter(item => !item.key.startsWith(prefix));
-          return [...summaryItemsForReferenz, ...newItems];
-        });
-      } else if (typ === 'Entsorgung') {
-        setEntsorgungSummaryItems(prev => {
-          const newItems = prev.filter(item => !item.key.startsWith(prefix));
-          return [...summaryItemsForReferenz, ...newItems];
-        });
-      }
-    } catch (error) {
-      console.error(`Fehler beim Laden der Artikel für ${typ}:`, error);
-      if (typ === 'Projekt') {
-        setProjektSummaryItems(prev => prev.filter(item => !item.key.startsWith(prefix)));
-      } else if (typ === 'Lager') {
-        setLagerSummaryItems(prev => prev.filter(item => !item.key.startsWith(prefix)));
-      } else if (typ === 'Entsorgung') {
-        setEntsorgungSummaryItems(prev => prev.filter(item => !item.key.startsWith(prefix)));
-      }
-    }
-  }, [warenausgangstyp, warenausgaenge, allProducts]);
-
   const loadReasons = async () => {
     try {
       const reasons = await apiService.getReasons();
@@ -371,121 +219,68 @@ const WarenausgaengeScreen: React.FC = () => {
     }
   };
 
+  const loadAllLocations = async () => {
+    try {
+      const isAuthenticated = await apiService.isAuthenticated();
+      if (isAuthenticated) {
+        // Load all users to get all locations
+        const users = await apiService.getUsers();
+        const locationsSet = new Set<string>();
+        
+        users.forEach((user: any) => {
+          if (user.locations) {
+            // Handle both array and string formats
+            if (Array.isArray(user.locations)) {
+              user.locations.forEach((loc: string) => {
+                if (loc && loc.trim()) {
+                  locationsSet.add(loc.trim());
+                }
+              });
+            } else if (typeof user.locations === 'string') {
+              // Split comma-separated locations
+              user.locations.split(',').forEach((loc: string) => {
+                if (loc && loc.trim()) {
+                  locationsSet.add(loc.trim());
+                }
+              });
+            }
+          }
+        });
+        
+        const allLocs = Array.from(locationsSet).sort();
+        setAllLocations(allLocs);
+      } else {
+        // Fallback: use user locations
+        setAllLocations(userLocations);
+      }
+    } catch (error) {
+      // Fallback: use user locations
+      setAllLocations(userLocations);
+    }
+  };
+
   useFocusEffect(
     useCallback(() => {
       loadWarenausgaenge();
       loadUserLagerort(); // Lagerort des Benutzers laden
+      loadAllLocations(); // Alle Lagerorte für "Nach Lagerort" laden
       loadReasons(); // Ausgangsgründe laden
-    loadJustifications(); // Rücklieferungsgründe laden
+      loadJustifications(); // Rücklieferungsgründe laden
     }, [])
   );
 
-  // Lade Artikel für Referenz, wenn sich warenausgangstyp oder referenz ändert
+  // Reset Body-Bereich wenn Warenausgangstyp geändert wird
   useEffect(() => {
-    if (warenausgangstyp === 'Rücksendung Lieferant') {
-      loadRuecksendungItemsForReferenz(referenz);
-    } else if (warenausgangstyp === 'Projekt') {
-      loadItemsForReferenz('Projekt', referenz);
-    } else if (warenausgangstyp === 'Lager') {
-      loadItemsForReferenz('Lager', referenz);
-    } else if (warenausgangstyp === 'Entsorgung') {
-      loadItemsForReferenz('Entsorgung', referenz);
-    } else {
-      // Reset alle Summary Items wenn Typ nicht unterstützt wird
-      setRuecksendungSummaryItems([]);
-      setProjektSummaryItems([]);
-      setLagerSummaryItems([]);
-      setEntsorgungSummaryItems([]);
-    }
-  }, [warenausgangstyp, referenz, loadRuecksendungItemsForReferenz, loadItemsForReferenz]);
-
-  // Lade Artikel neu, wenn warenausgaenge aktualisiert wird und eine Referenz vorhanden ist
-  useEffect(() => {
-    if (referenz.trim().length > 0) {
-      if (warenausgangstyp === 'Rücksendung Lieferant') {
-        loadRuecksendungItemsForReferenz(referenz);
-      } else if (warenausgangstyp === 'Projekt') {
-        loadItemsForReferenz('Projekt', referenz);
-      } else if (warenausgangstyp === 'Lager') {
-        loadItemsForReferenz('Lager', referenz);
-      } else if (warenausgangstyp === 'Entsorgung') {
-        loadItemsForReferenz('Entsorgung', referenz);
-      }
-    }
-  }, [warenausgaenge, warenausgangstyp, referenz, loadRuecksendungItemsForReferenz, loadItemsForReferenz]);
-
-  useEffect(() => {
-    if ((artikelnummer && artikelnummer.trim().length > 0) || selectedProduct) {
-      setShowArticleCard(true);
-    }
-  }, [artikelnummer, selectedProduct]);
-
-  const handleArticleSearch = () => {
-    if (warenausgangstyp === 'Rücksendung Lieferant') {
-      setShowArticleCard(true);
-      return;
-    }
-
-    if (!articleSearchTerm.trim()) {
-      loadAllProducts();
-      return;
-    }
-
-    setArtikelnummer(articleSearchTerm.trim());
-    setShowArticleCard(true);
-  };
-
-  const handleArticleFilterPress = () => {
-    Alert.alert('Filter', 'Die Filterfunktion wird derzeit noch nicht unterstützt.');
-  };
-
-  const getFilteredProducts = () => {
-    let filtered = allProducts;
-
-    // Filter nach Suchbegriff
-    if (productSearchQuery.trim() !== '') {
-      const query = productSearchQuery.toLowerCase();
-      filtered = filtered.filter(product =>
-        product.name?.toLowerCase().includes(query) ||
-        product.sku?.toLowerCase().includes(query) ||
-        product.description?.toLowerCase().includes(query)
-      );
-    }
-
-    // Filter nach Typ (falls Filter gesetzt)
-    if (productFilter.length > 0 && !productFilter.includes('alle')) {
-      // Hier kann später die Filterlogik erweitert werden
-    }
-
-    return filtered;
-  };
+    // Leere die Artikel-Liste wenn sich der Warenausgangstyp ändert
+    setItems([]);
+    setProductSearchQuery('');
+    setCurrentItemIndexForProductSelection(null);
+  }, [warenausgangstyp]);
 
   const loadAllProducts = async () => {
     try {
       const products = await apiService.getProducts();
       setAllProducts(products);
-      
-      // Filtere bereits hinzugefügte Artikel für Rücksendung Lieferant
-      if (warenausgangstyp === 'Rücksendung Lieferant') {
-        const assignedRuecksendungProductIds = new Set<number>();
-        const assignedRuecksendungSkus = new Set<string>();
-        ruecksendungSummaryItems.forEach(ruecksendungItem => {
-          if (ruecksendungItem.productId != null) {
-            assignedRuecksendungProductIds.add(ruecksendungItem.productId);
-          }
-          if (ruecksendungItem.sku) {
-            assignedRuecksendungSkus.add(ruecksendungItem.sku.toLowerCase());
-          }
-        });
-        
-        const filteredProducts = products.filter(product => 
-          !assignedRuecksendungProductIds.has(product.id) &&
-          !(product.sku && assignedRuecksendungSkus.has(product.sku.toLowerCase()))
-        );
-        
-        setAllProducts(filteredProducts);
-      }
-      
       setProductsModalVisible(true);
     } catch (error) {
       console.error('Error loading products:', error);
@@ -493,79 +288,22 @@ const WarenausgaengeScreen: React.FC = () => {
     }
   };
 
-  const handleAddArticleCard = () => {
-    // Für alle Typen: Artikel direkt zu den entsprechenden Summary Items hinzufügen
-    if (!selectedProduct && artikelnummer.trim()) {
-      // Versuche Produkt zu finden
-      searchProductBySKU(artikelnummer.trim());
-      return;
+  const selectProduct = (product: any) => {
+    // If we're selecting for a specific item in the list
+    if (currentItemIndexForProductSelection !== null) {
+      const newItems = [...items];
+      newItems[currentItemIndexForProductSelection].selectedProduct = product;
+      newItems[currentItemIndexForProductSelection].artikelnummer = product.sku || '';
+      newItems[currentItemIndexForProductSelection].selectedUnit = product.unit || 'Stück';
+      setItems(newItems);
+      setCurrentItemIndexForProductSelection(null);
+    } else {
+      // Legacy: single product selection
+      setSelectedProduct(product);
+      setArtikelnummer(product.sku);
+      setSelectedUnit(product.unit || 'Stück');
     }
     
-    if (selectedProduct) {
-      const typPrefix = warenausgangstyp.toLowerCase().replace(/\s+/g, '-');
-      const tempKey = `${typPrefix}-${selectedProduct.id}-${Date.now()}`;
-      const nowTimestamp = Date.now();
-      const quantityValue = anzahl || 1;
-
-      const payloadForSave = {
-        key: tempKey,
-        productId: selectedProduct.id,
-        name: selectedProduct.name || `Artikel`,
-        unit: selectedUnit || selectedProduct.unit || 'Stück',
-        quantity: quantityValue,
-        sku: selectedProduct.sku,
-        supplier: lieferant || undefined,
-        type: selectedProduct.type,
-        location: lagerort || undefined,
-        bookingHistory: [],
-        itemType: 'material' as const,
-        lastTimestamp: undefined,
-        lastBookingQuantity: undefined,
-        lastBookingUnit: undefined,
-        lastBooking: undefined,
-        quantityInput: quantityValue > 0 ? quantityValue : 1,
-        createdAtTimestamp: nowTimestamp,
-      };
-
-      // Artikel zu den entsprechenden Summary Items hinzufügen
-      if (warenausgangstyp === 'Rücksendung Lieferant') {
-        setRuecksendungSummaryItems((prev) => [...prev, payloadForSave]);
-      } else if (warenausgangstyp === 'Projekt') {
-        setProjektSummaryItems((prev) => [...prev, payloadForSave]);
-      } else if (warenausgangstyp === 'Lager') {
-        setLagerSummaryItems((prev) => [...prev, payloadForSave]);
-      } else if (warenausgangstyp === 'Entsorgung') {
-        setEntsorgungSummaryItems((prev) => [...prev, payloadForSave]);
-      }
-
-      // Reset form
-      setArtikelnummer('');
-      setSelectedProduct(null);
-      setSelectedUnit('Stück');
-      setAnzahl(1);
-      setShowArticleCard(false);
-    } else {
-      setShowArticleCard(true);
-      if (!selectedProduct) {
-        loadAllProducts();
-      }
-    }
-  };
-
-  const clearArticleCard = () => {
-    setShowArticleCard(false);
-    setArtikelnummer('');
-    setSelectedProduct(null);
-    setSelectedUnit('Stück');
-    setAnzahl(1);
-    setBegruendung('');
-    setShowBegruendungField(false);
-  };
-
-  const selectProduct = (product: any) => {
-    setSelectedProduct(product);
-    setArtikelnummer(product.sku);
-    setSelectedUnit(product.unit || 'Stück');
     setProductsModalVisible(false);
     
     // Reset justification field when selecting new product
@@ -804,20 +542,39 @@ const WarenausgaengeScreen: React.FC = () => {
   };
 
   const handleBarCodeScanned = ({ data }: { data: string }) => {
-    setArtikelnummer(data);
+    // If we're scanning for a specific item in the list
+    if (currentItemIndexForProductSelection !== null) {
+      const newItems = [...items];
+      newItems[currentItemIndexForProductSelection].artikelnummer = data;
+      setItems(newItems);
+      searchProductBySKU(data, currentItemIndexForProductSelection);
+    } else {
+      // Legacy: single product selection
+      setArtikelnummer(data);
+      searchProductBySKU(data);
+    }
     setScannerVisible(false);
-    // Try to find and select the product
-    searchProductBySKU(data);
   };
 
-  const searchProductBySKU = async (sku: string) => {
+  const searchProductBySKU = async (sku: string, itemIndex?: number) => {
     try {
       const products = await apiService.getProducts();
       const product = products.find(p => p.sku === sku.trim());
       
       if (product) {
-        setSelectedProduct(product);
-        setSelectedUnit(product.unit || 'Stück');
+        if (itemIndex !== undefined) {
+          // Update item in list
+          const newItems = [...items];
+          newItems[itemIndex].selectedProduct = product;
+          newItems[itemIndex].artikelnummer = product.sku || '';
+          newItems[itemIndex].selectedUnit = product.unit || 'Stück';
+          setItems(newItems);
+          setCurrentItemIndexForProductSelection(null);
+        } else {
+          // Legacy: single product selection
+          setSelectedProduct(product);
+          setSelectedUnit(product.unit || 'Stück');
+        }
       } else {
         Alert.alert('Produkt nicht gefunden', `Kein Produkt mit SKU "${sku}" gefunden.`);
       }
@@ -836,433 +593,8 @@ const WarenausgaengeScreen: React.FC = () => {
     setAuswahlGrundDialogVisible(false);
   };
 
-  const openUnitDialog = () => {
-    if (selectedProduct) {
-      setUnitDialogVisible(true);
-    }
-  };
+  // selectUnit wird jetzt direkt im Menu.Item onPress aufgerufen
 
-  const selectUnit = (unit: string) => {
-    setSelectedUnit(unit);
-    setUnitDialogVisible(false);
-  };
-
-  // Funktionen für Rücksendung Lieferant
-  const adjustRuecksendungSummaryQuantity = (key: string, change: number) => {
-    setRuecksendungSummaryItems(prev =>
-      prev.map(item => {
-        if (item.key !== key) {
-          return item;
-        }
-        const step = item.unit === 'Paket' ? 0.1 : 1;
-        const newValue = Math.max(
-          0,
-          parseFloat((item.quantityInput + change * step).toFixed(item.unit === 'Paket' ? 1 : 0))
-        );
-        return { ...item, quantityInput: newValue };
-      })
-    );
-  };
-
-  // Generische Funktion zum Anpassen der Menge für alle Typen
-  const adjustSummaryQuantity = (typ: string, key: string, change: number) => {
-    const updateItem = (item: any) => {
-      if (item.key !== key) {
-        return item;
-      }
-      const step = item.unit === 'Paket' ? 0.1 : 1;
-      const newValue = Math.max(
-        0,
-        parseFloat((item.quantityInput + change * step).toFixed(item.unit === 'Paket' ? 1 : 0))
-      );
-      return { ...item, quantityInput: newValue };
-    };
-
-    if (typ === 'Projekt') {
-      setProjektSummaryItems(prev => prev.map(updateItem));
-    } else if (typ === 'Lager') {
-      setLagerSummaryItems(prev => prev.map(updateItem));
-    } else if (typ === 'Entsorgung') {
-      setEntsorgungSummaryItems(prev => prev.map(updateItem));
-    }
-  };
-
-  const deleteRuecksendungSummaryItem = async (item: any) => {
-    // Prüfe, ob der Artikel aus der DB geladen wurde (key beginnt mit "ruecksendung-ref-")
-    if (item.key.startsWith('ruecksendung-ref-')) {
-      // Extrahiere die ID aus dem key (z.B. "ruecksendung-ref-123-0" -> "123")
-      const match = item.key.match(/ruecksendung-ref-(\d+)/);
-      if (match && match[1]) {
-        const warenausgangId = parseInt(match[1], 10);
-        
-        // Validiere, dass die ID eine gültige Zahl ist
-        if (isNaN(warenausgangId) || warenausgangId <= 0) {
-          console.error('Ungültige Warenausgang-ID:', match[1], 'aus key:', item.key);
-          Alert.alert('Fehler', 'Ungültige Artikel-ID. Der Artikel konnte nicht gelöscht werden.');
-          return;
-        }
-        
-        console.log('Lösche Warenausgang mit ID:', warenausgangId, 'aus key:', item.key);
-        
-        try {
-          const isAuthenticated = await apiService.isAuthenticated();
-          if (isAuthenticated) {
-            // Lösche den Warenausgang aus der DB
-            await apiService.deleteWarenausgang(warenausgangId);
-            // Lade Warenausgänge neu, damit die Historie aktualisiert wird
-            await loadWarenausgaenge();
-            // Lade Artikel für Referenz neu, damit der Bodybereich aktualisiert wird
-            if (referenz.trim().length > 0) {
-              await loadRuecksendungItemsForReferenz(referenz);
-            }
-            return;
-          } else {
-            // Im Offline-Modus: Zeige Fehlermeldung
-            Alert.alert('Fehler', 'Im Offline-Modus können Artikel nicht gelöscht werden. Bitte verbinden Sie sich mit dem Internet.');
-            return;
-          }
-        } catch (error: any) {
-          console.error('Fehler beim Löschen des Warenausgangs:', error);
-          const errorMessage = error?.response?.status === 404 
-            ? 'Der Artikel wurde nicht in der Datenbank gefunden. Möglicherweise wurde er bereits gelöscht.'
-            : error?.response?.status === 401
-            ? 'Sie sind nicht autorisiert, diesen Artikel zu löschen.'
-            : 'Der Artikel konnte nicht aus der Datenbank gelöscht werden.';
-          Alert.alert('Fehler', errorMessage);
-          return;
-        }
-      } else {
-        console.error('Konnte ID nicht aus key extrahieren:', item.key);
-        Alert.alert('Fehler', 'Die Artikel-ID konnte nicht ermittelt werden.');
-        return;
-      }
-    }
-    
-    // Entferne den Artikel aus ruecksendungSummaryItems (nur wenn nicht aus DB geladen)
-    setRuecksendungSummaryItems((prev) => prev.filter((i) => i.key !== item.key));
-  };
-
-  const saveRuecksendungSummaryItem = async (item: any) => {
-    if (item.quantityInput <= 0) {
-      Alert.alert('Hinweis', 'Bitte wählen Sie eine Menge größer als 0 aus.');
-      return;
-    }
-
-    setRuecksendungSummarySaving(item.key);
-
-    try {
-      let product =
-        allProducts.find(p => p.id === item.productId) ||
-        (item.sku ? allProducts.find(p => p.sku === item.sku) : undefined);
-
-      if (!product) {
-        try {
-          const products = await apiService.getProducts();
-          setAllProducts(products);
-          product =
-            products.find(p => p.id === item.productId) ||
-            (item.sku ? products.find(p => p.sku === item.sku) : undefined);
-        } catch (error) {
-          // ignore, handled below
-        }
-      }
-
-      if (!product) {
-        Alert.alert('Fehler', 'Produkt wurde nicht gefunden.');
-        return;
-      }
-
-      const quantityValue = item.quantityInput;
-
-      // Notes zusammenstellen - alle Informationen für die Historie
-      const notesParts: string[] = [];
-      if (referenz && referenz.trim()) {
-        notesParts.push(`Referenz: ${referenz.trim()}`);
-      }
-      if (lieferant && lieferant.trim()) {
-        notesParts.push(`Lieferant: ${lieferant.trim()}`);
-      }
-      if (lagerort && lagerort.trim()) {
-        notesParts.push(`Lagerort: ${lagerort.trim()}`);
-      }
-      if (bemerkung && bemerkung.trim()) {
-        notesParts.push(`Bemerkung: ${bemerkung.trim()}`);
-      }
-      const notes = notesParts.length > 0 ? notesParts.join(' | ') : undefined;
-
-      const warenausgangData: Warenausgang = {
-        id: Date.now(), // Temporary ID for local storage
-        productId: product.id,
-        productName: product.name,
-        quantity: quantityValue,
-        unitPrice: product.price || 0,
-        totalPrice: (product.price || 0) * quantityValue,
-        customer: '',
-        orderNumber: referenz.trim() || '',
-        notes: notes || undefined,
-        attribut: 'Rücksendung Lieferant',
-        projectName: '',
-        begruendung: undefined,
-        createdAt: new Date().toISOString(),
-      };
-
-      let savedWarenausgangId: number | string = warenausgangData.id;
-      
-      const isAuthenticated = await apiService.isAuthenticated();
-      if (isAuthenticated && isOnline) {
-        try {
-          const apiRequest = {
-            productId: warenausgangData.productId,
-            quantity: warenausgangData.quantity,
-            unitPrice: warenausgangData.unitPrice,
-            customer: warenausgangData.customer,
-            orderNumber: warenausgangData.orderNumber,
-            notes: warenausgangData.notes,
-            attribut: warenausgangData.attribut,
-            projectName: warenausgangData.projectName,
-            begruendung: warenausgangData.begruendung,
-          };
-          
-          const createdWarenausgang = await apiService.createWarenausgang(apiRequest);
-          savedWarenausgangId = createdWarenausgang.id;
-          await databaseService.saveWarenausgang(createdWarenausgang);
-        } catch (apiError) {
-          console.error('API Error, falling back to local storage:', apiError);
-          await databaseService.saveWarenausgang(warenausgangData, true);
-        }
-      } else {
-        await databaseService.saveWarenausgang(warenausgangData, true);
-      }
-
-      await loadWarenausgaenge();
-
-      // Aktualisiere den Key des Artikels, damit er als gespeichert markiert wird
-      // und die +/- Buttons verschwinden
-      setRuecksendungSummaryItems((prev) => 
-        prev.map((i) => {
-          if (i.key === item.key) {
-            // Aktualisiere den Key, damit er als gespeichert markiert wird
-            return {
-              ...i,
-              key: `ruecksendung-ref-${savedWarenausgangId}-0`,
-              quantityInput: quantityValue,
-            };
-          }
-          return i;
-        })
-      );
-      
-      // Lade Artikel für Referenz neu, damit der Bodybereich aktualisiert wird
-      if (referenz.trim().length > 0) {
-        await loadRuecksendungItemsForReferenz(referenz);
-      }
-    } catch (error) {
-      Alert.alert('Fehler', 'Artikel konnte nicht gespeichert werden.');
-    } finally {
-      setRuecksendungSummarySaving(null);
-    }
-  };
-
-  // Generische Save-Funktion für alle Warenausgangstypen
-  const saveSummaryItem = async (item: any, typ: string) => {
-    if (item.quantityInput <= 0) {
-      Alert.alert('Hinweis', 'Bitte wählen Sie eine Menge größer als 0 aus.');
-      return;
-    }
-
-    const prefix = `${typ.toLowerCase().replace(/\s+/g, '-')}-ref-`;
-    
-    // Setze den entsprechenden Saving-State
-    if (typ === 'Projekt') {
-      setProjektSummarySaving(item.key);
-    } else if (typ === 'Lager') {
-      setLagerSummarySaving(item.key);
-    } else if (typ === 'Entsorgung') {
-      setEntsorgungSummarySaving(item.key);
-    }
-
-    try {
-      let product =
-        allProducts.find(p => p.id === item.productId) ||
-        (item.sku ? allProducts.find(p => p.sku === item.sku) : undefined);
-
-      if (!product) {
-        try {
-          const products = await apiService.getProducts();
-          setAllProducts(products);
-          product =
-            products.find(p => p.id === item.productId) ||
-            (item.sku ? products.find(p => p.sku === item.sku) : undefined);
-        } catch (error) {
-          // ignore, handled below
-        }
-      }
-
-      if (!product) {
-        Alert.alert('Fehler', 'Produkt wurde nicht gefunden.');
-        return;
-      }
-
-      const quantityValue = item.quantityInput;
-
-      // Notes zusammenstellen - alle Informationen für die Historie
-      const notesParts: string[] = [];
-      if (referenz && referenz.trim()) {
-        notesParts.push(`Referenz: ${referenz.trim()}`);
-      }
-      if (lagerort && lagerort.trim()) {
-        notesParts.push(`Lagerort: ${lagerort.trim()}`);
-      }
-      if (typ === 'Projekt' && projektnummer && projektnummer.trim()) {
-        notesParts.push(`Projektnummer: ${projektnummer.trim()}`);
-      }
-      if (bemerkung && bemerkung.trim()) {
-        notesParts.push(`Bemerkung: ${bemerkung.trim()}`);
-      }
-      if (typ === 'Entsorgung' && auswahlGrund && auswahlGrund.trim()) {
-        notesParts.push(`Grund: ${auswahlGrund.trim()}`);
-      }
-      const notes = notesParts.length > 0 ? notesParts.join(' | ') : undefined;
-
-      const warenausgangData: Warenausgang = {
-        id: Date.now(),
-        productId: product.id,
-        productName: product.name,
-        quantity: quantityValue,
-        unitPrice: product.price || 0,
-        totalPrice: (product.price || 0) * quantityValue,
-        customer: '',
-        orderNumber: referenz.trim() || '',
-        notes: notes || undefined,
-        attribut: typ,
-        projectName: typ === 'Projekt' ? projektnummer.trim() : '',
-        begruendung: typ === 'Entsorgung' ? auswahlGrund : undefined,
-        createdAt: new Date().toISOString(),
-      };
-
-      let savedWarenausgangId: number | string = warenausgangData.id;
-      
-      const isAuthenticated = await apiService.isAuthenticated();
-      if (isAuthenticated && isOnline) {
-        try {
-          const apiRequest = {
-            productId: warenausgangData.productId,
-            quantity: warenausgangData.quantity,
-            unitPrice: warenausgangData.unitPrice,
-            customer: warenausgangData.customer,
-            orderNumber: warenausgangData.orderNumber,
-            notes: warenausgangData.notes,
-            attribut: warenausgangData.attribut,
-            projectName: warenausgangData.projectName,
-            begruendung: warenausgangData.begruendung,
-          };
-          
-          const createdWarenausgang = await apiService.createWarenausgang(apiRequest);
-          savedWarenausgangId = createdWarenausgang.id;
-          await databaseService.saveWarenausgang(createdWarenausgang);
-        } catch (apiError) {
-          console.error('API Error, falling back to local storage:', apiError);
-          await databaseService.saveWarenausgang(warenausgangData, true);
-        }
-      } else {
-        await databaseService.saveWarenausgang(warenausgangData, true);
-      }
-
-      await loadWarenausgaenge();
-
-      // Aktualisiere den Key des Artikels, damit er als gespeichert markiert wird
-      const updateItems = (prev: any[]) => 
-        prev.map((i) => {
-          if (i.key === item.key) {
-            return {
-              ...i,
-              key: `${prefix}${savedWarenausgangId}-0`,
-              quantityInput: quantityValue,
-            };
-          }
-          return i;
-        });
-
-      if (typ === 'Projekt') {
-        setProjektSummaryItems(updateItems);
-      } else if (typ === 'Lager') {
-        setLagerSummaryItems(updateItems);
-      } else if (typ === 'Entsorgung') {
-        setEntsorgungSummaryItems(updateItems);
-      }
-      
-      // Lade Artikel für Referenz neu
-      if (referenz.trim().length > 0) {
-        await loadItemsForReferenz(typ, referenz);
-      }
-    } catch (error) {
-      Alert.alert('Fehler', 'Artikel konnte nicht gespeichert werden.');
-    } finally {
-      if (typ === 'Projekt') {
-        setProjektSummarySaving(null);
-      } else if (typ === 'Lager') {
-        setLagerSummarySaving(null);
-      } else if (typ === 'Entsorgung') {
-        setEntsorgungSummarySaving(null);
-      }
-    }
-  };
-
-  // Generische Delete-Funktion für alle Warenausgangstypen
-  const deleteSummaryItem = async (item: any, typ: string) => {
-    const prefix = `${typ.toLowerCase().replace(/\s+/g, '-')}-ref-`;
-    
-    // Prüfe, ob der Artikel aus der DB geladen wurde
-    if (item.key.startsWith(prefix)) {
-      const match = item.key.match(new RegExp(`${prefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(\\d+)`));
-      if (match && match[1]) {
-        const warenausgangId = parseInt(match[1], 10);
-        
-        if (isNaN(warenausgangId) || warenausgangId <= 0) {
-          console.error('Ungültige Warenausgang-ID:', match[1], 'aus key:', item.key);
-          Alert.alert('Fehler', 'Ungültige Artikel-ID. Der Artikel konnte nicht gelöscht werden.');
-          return;
-        }
-        
-        try {
-          const isAuthenticated = await apiService.isAuthenticated();
-          if (isAuthenticated) {
-            await apiService.deleteWarenausgang(warenausgangId);
-            await loadWarenausgaenge();
-            if (referenz.trim().length > 0) {
-              await loadItemsForReferenz(typ, referenz);
-            }
-            return;
-          } else {
-            Alert.alert('Fehler', 'Im Offline-Modus können Artikel nicht gelöscht werden. Bitte verbinden Sie sich mit dem Internet.');
-            return;
-          }
-        } catch (error: any) {
-          console.error('Fehler beim Löschen des Warenausgangs:', error);
-          const errorMessage = error?.response?.status === 404 
-            ? 'Der Artikel wurde nicht in der Datenbank gefunden. Möglicherweise wurde er bereits gelöscht.'
-            : error?.response?.status === 401
-            ? 'Sie sind nicht autorisiert, diesen Artikel zu löschen.'
-            : 'Der Artikel konnte nicht aus der Datenbank gelöscht werden.';
-          Alert.alert('Fehler', errorMessage);
-          return;
-        }
-      } else {
-        console.error('Konnte ID nicht aus key extrahieren:', item.key);
-        Alert.alert('Fehler', 'Die Artikel-ID konnte nicht ermittelt werden.');
-        return;
-      }
-    }
-    
-    // Entferne den Artikel aus den entsprechenden Summary Items
-    if (typ === 'Projekt') {
-      setProjektSummaryItems((prev) => prev.filter((i) => i.key !== item.key));
-    } else if (typ === 'Lager') {
-      setLagerSummaryItems((prev) => prev.filter((i) => i.key !== item.key));
-    } else if (typ === 'Entsorgung') {
-      setEntsorgungSummaryItems((prev) => prev.filter((i) => i.key !== item.key));
-    }
-  };
 
   // Get current project status when "Projekt" is selected
   const getProjectStatus = () => {
@@ -1291,6 +623,291 @@ const WarenausgaengeScreen: React.FC = () => {
     }
     
     return units;
+  };
+
+  // Add new item to the list
+  const addNewItem = useCallback(() => {
+    const newItem: WarenausgangItem = {
+      id: `item-${Date.now()}-${Math.random()}`,
+      artikelnummer: '',
+      anzahl: '1',
+      selectedProduct: null,
+      selectedUnit: 'Stück',
+    };
+    setItems((prev) => [...prev, newItem]);
+  }, []);
+
+  // Save item function
+  const handleSaveItem = async (itemIndex: number) => {
+    const item = items[itemIndex];
+    if (!item) {
+      return;
+    }
+
+    if (!item.selectedProduct) {
+      Alert.alert('Hinweis', `Bitte wählen Sie zuerst einen Artikel für Position ${itemIndex + 1} aus.`);
+      return;
+    }
+
+    const quantityValue = parseFloat(item.anzahl.replace(',', '.')) || 0;
+    if (quantityValue <= 0) {
+      Alert.alert('Hinweis', `Bitte geben Sie eine gültige Anzahl für Position ${itemIndex + 1} ein.`);
+      return;
+    }
+
+    try {
+      // Hier kann die Logik zum Speichern des Artikels implementiert werden
+      // Z.B. API-Call oder lokale Speicherung
+      Alert.alert('Erfolg', `Artikel "${item.selectedProduct.name}" wurde gespeichert.`);
+      
+      // Optional: Artikel aus der Liste entfernen nach dem Speichern
+      // setItems((prev) => prev.filter((_, i) => i !== itemIndex));
+    } catch (error) {
+      console.error('Error saving item:', error);
+      Alert.alert('Fehler', 'Artikel konnte nicht gespeichert werden.');
+    }
+  };
+
+  // Render item forms
+  const renderItemForms = () => {
+    if (items.length === 0) {
+      return (
+        <View style={styles.emptyState}>
+          <Paragraph style={styles.emptyStateText}>
+            Keine Artikel hinzugefügt. Klicken Sie auf '+ Artikel hinzufügen' um zu beginnen.
+          </Paragraph>
+          <Button
+            mode="contained"
+            icon="plus"
+            onPress={addNewItem}
+            style={[styles.addButton, { marginTop: 16 }]}
+            buttonColor={BRAND_LIGHT_BLUE}
+          >
+            Artikel hinzufügen
+          </Button>
+        </View>
+      );
+    }
+
+    return items.map((item, index) => {
+      const quantityValue = parseFloat(item.anzahl.replace(',', '.')) || 0;
+
+      return (
+        <Card key={item.id} style={styles.itemFormCard}>
+          <Card.Content>
+            <View style={styles.itemHeader}>
+              <Title style={styles.itemTitle}>
+                {item.selectedProduct?.name || `Artikel ${index + 1}`}
+              </Title>
+              <View style={styles.itemHeaderButtons}>
+                <IconButton
+                  icon="content-save"
+                  size={24}
+                  iconColor={
+                    quantityValue <= 0 || !item.selectedProduct
+                      ? '#9e9e9e'
+                      : BRAND_DARK_BLUE
+                  }
+                  disabled={quantityValue <= 0 || !item.selectedProduct}
+                  onPress={() => handleSaveItem(index)}
+                  style={styles.iconButton}
+                />
+                <IconButton
+                  icon="close"
+                  size={24}
+                  iconColor="#d32f2f"
+                  onPress={() => {
+                    Alert.alert(
+                      'Artikel löschen',
+                      `Möchten Sie wirklich "${item.selectedProduct?.name || `Artikel ${index + 1}`}" löschen?`,
+                      [
+                        { text: 'Abbrechen', style: 'cancel' },
+                        {
+                          text: 'Löschen',
+                          style: 'destructive',
+                          onPress: () => {
+                            setItems((prev) => prev.filter((_, i) => i !== index));
+                          },
+                        },
+                      ]
+                    );
+                  }}
+                  style={styles.iconButton}
+                />
+              </View>
+            </View>
+
+            {/* Artikelnummer */}
+            <View style={styles.formField}>
+              <Paragraph style={styles.fieldLabel}>Artikelnummer:</Paragraph>
+              <View style={styles.inputContainer}>
+                <TextInput
+                  style={styles.artikelnummerInput}
+                  value={item.artikelnummer}
+                  onChangeText={(text) => {
+                    const newItems = [...items];
+                    newItems[index].artikelnummer = text;
+                    setItems(newItems);
+                  }}
+                  placeholder="z.B. DELL-XPS13-001"
+                  mode="outlined"
+                  dense
+                  autoCapitalize="characters"
+                />
+                <IconButton
+                  icon="magnify"
+                  size={20}
+                  iconColor={BRAND_DARK_BLUE}
+                  onPress={async () => {
+                    try {
+                      if (allProducts.length === 0) {
+                        await loadAllProducts();
+                      }
+                      setCurrentItemIndexForProductSelection(index);
+                      setProductsModalVisible(true);
+                    } catch (error) {
+                      console.error('Error loading products:', error);
+                    }
+                  }}
+                  style={styles.iconButton}
+                />
+                <IconButton
+                  icon="barcode-scan"
+                  size={20}
+                  iconColor={BRAND_DARK_BLUE}
+                  onPress={async () => {
+                    setCurrentItemIndexForProductSelection(index);
+                    await openScanner();
+                  }}
+                  style={styles.iconButton}
+                />
+              </View>
+            </View>
+
+            {/* Anzahl und Einheit - nebeneinander */}
+            <View style={styles.formField}>
+              <View style={styles.quantityAndUnitContainer}>
+                {/* Anzahl Spalte */}
+                <View style={styles.columnContainer}>
+                  <Paragraph style={styles.fieldLabel}>Menge:</Paragraph>
+                  <View style={styles.quantityContainer}>
+                    <IconButton
+                      icon="minus"
+                      mode="contained"
+                      size={20}
+                      onPress={() => {
+                        const newItems = [...items];
+                        const current = parseFloat(newItems[index].anzahl.replace(',', '.')) || 0;
+                        const newValue = Math.max(1, current - 1);
+                        newItems[index].anzahl = Math.round(newValue).toString();
+                        setItems(newItems);
+                      }}
+                      style={styles.quantityButton}
+                      iconColor="white"
+                    />
+                    <TextInput
+                      style={styles.quantityInput}
+                      value={item.anzahl}
+                      onChangeText={(text) => {
+                        const newItems = [...items];
+                        const numericValue = parseFloat(text.replace(',', '.')) || 0;
+                        const clampedValue = Math.max(1, numericValue);
+                        newItems[index].anzahl = Math.round(clampedValue).toString();
+                        setItems(newItems);
+                      }}
+                      mode="outlined"
+                      dense
+                      keyboardType="numeric"
+                    />
+                    <IconButton
+                      icon="plus"
+                      mode="contained"
+                      size={20}
+                      onPress={() => {
+                        const newItems = [...items];
+                        const current = parseFloat(newItems[index].anzahl.replace(',', '.')) || 0;
+                        const newValue = current + 1;
+                        newItems[index].anzahl = Math.round(newValue).toString();
+                        setItems(newItems);
+                      }}
+                      style={styles.quantityButton}
+                      iconColor="white"
+                    />
+                  </View>
+                </View>
+
+                {/* Einheit Spalte - nur anzeigen wenn Produkt ausgewählt */}
+                {item.selectedProduct && (
+                  <View style={styles.columnContainer}>
+                    <Paragraph style={styles.fieldLabel}>Einheit:</Paragraph>
+                    <Menu
+                      visible={unitMenuVisible && currentItemIndexForProductSelection === index}
+                      onDismiss={() => {
+                        setUnitMenuVisible(false);
+                        // Reset after a small delay to ensure menu can reopen
+                        setTimeout(() => {
+                          if (currentItemIndexForProductSelection === index) {
+                            setCurrentItemIndexForProductSelection(null);
+                          }
+                        }, 100);
+                      }}
+                      anchor={
+                        <TouchableOpacity
+                          style={styles.unitDropdownButton}
+                          onPress={() => {
+                            // If menu is already open for this item, close it first
+                            if (unitMenuVisible && currentItemIndexForProductSelection === index) {
+                              setUnitMenuVisible(false);
+                              setCurrentItemIndexForProductSelection(null);
+                            } else {
+                              // Set index first, then open menu
+                              setCurrentItemIndexForProductSelection(index);
+                              setTimeout(() => {
+                                setUnitMenuVisible(true);
+                              }, 50);
+                            }
+                          }}
+                        >
+                          <Paragraph style={styles.unitDropdownText}>
+                            {item.selectedUnit || item.selectedProduct?.unit || 'Stück'}
+                          </Paragraph>
+                          <MaterialCommunityIcons 
+                            name="chevron-down" 
+                            size={20} 
+                            color={BRAND_DARK_BLUE} 
+                          />
+                        </TouchableOpacity>
+                      }
+                    >
+                      {(() => {
+                        const units = ['Stück', 'Palette', 'Paket'];
+                        if (item.selectedProduct?.unit && !units.includes(item.selectedProduct.unit)) {
+                          units.push(item.selectedProduct.unit);
+                        }
+                        return units.map((unit) => (
+                          <Menu.Item
+                            key={unit}
+                            onPress={() => {
+                              const newItems = [...items];
+                              newItems[index].selectedUnit = unit;
+                              setItems(newItems);
+                              setUnitMenuVisible(false);
+                              setCurrentItemIndexForProductSelection(null);
+                            }}
+                            title={unit}
+                            titleStyle={styles.menuItemText}
+                          />
+                        ));
+                      })()}
+                    </Menu>
+                  </View>
+                )}
+              </View>
+            </View>
+          </Card.Content>
+        </Card>
+      );
+    });
   };
 
   const handleSubmit = async () => {
@@ -1452,343 +1069,6 @@ const WarenausgaengeScreen: React.FC = () => {
       hour: '2-digit',
       minute: '2-digit',
     });
-  };
-
-  // Utility-Funktionen für Rücksendung Lieferant
-  const getUnitLabel = (unit: string, quantity: number) => {
-    if (unit === 'Palette') {
-      return quantity === 1 ? 'Palette' : 'Paletten';
-    }
-    if (unit === 'Paket') {
-      return quantity === 1 ? 'Paket' : 'Pakete';
-    }
-    return quantity === 1 ? 'Stück' : 'Stück';
-  };
-
-  const formatQuantityValue = (value: number) => {
-    if (value % 1 === 0) {
-      return Math.round(value).toString();
-    }
-    return value.toFixed(1).replace('.', ',');
-  };
-
-  const renderRuecksendungSummaryItem = (item: any) => {
-    const timestamp = item.lastTimestamp ? new Date(item.lastTimestamp) : undefined;
-
-    return (
-      <Card key={item.key} style={styles.orderSummaryCard}>
-        <Card.Content>
-          <View style={styles.projectMaterialItemHeader}>
-            <View style={styles.projectMaterialItemInfo}>
-              <Title style={styles.projectMaterialItemName}>{item.name}</Title>
-              {item.sku && (
-                <Paragraph style={styles.projectMaterialItemDetails}>
-                  {item.sku}
-                </Paragraph>
-              )}
-            </View>
-            <View style={styles.projectMaterialActionButtons}>
-              {!item.key.startsWith('ruecksendung-ref-') && (
-                <IconButton
-                  icon="content-save"
-                  size={22}
-                  iconColor={BRAND_DARK_BLUE}
-                  onPress={() => saveRuecksendungSummaryItem(item)}
-                  disabled={ruecksendungSummarySaving === item.key || (item.quantityInput ?? 0) <= 0}
-                />
-              )}
-              <IconButton
-                icon="close"
-                size={22}
-                iconColor="#d32f2f"
-                onPress={() => {
-                  Alert.alert(
-                    'Artikel entfernen',
-                    `Möchten Sie wirklich "${item.name}" entfernen?${item.key.startsWith('ruecksendung-ref-') ? ' Der Artikel wird auch aus der Datenbank gelöscht.' : ''}`,
-                    [
-                      {
-                        text: 'Abbrechen',
-                        style: 'cancel',
-                      },
-                      {
-                        text: 'Entfernen',
-                        style: 'destructive',
-                        onPress: () => {
-                          deleteRuecksendungSummaryItem(item);
-                        },
-                      },
-                    ],
-                  );
-                }}
-              />
-            </View>
-          </View>
-
-          <View style={styles.projectMaterialQuantityContainer}>
-            <Paragraph style={styles.projectMaterialQuantityLabel}>Menge:</Paragraph>
-            <View style={styles.projectMaterialQuantityControls}>
-              {!item.key.startsWith('ruecksendung-ref-') && (
-                <>
-                  <IconButton
-                    icon="minus"
-                    size={20}
-                    iconColor="white"
-                    style={[styles.projectMaterialQuantityButton, { backgroundColor: BRAND_LIGHT_BLUE }]}
-                    onPress={() => adjustRuecksendungSummaryQuantity(item.key, -1)}
-                  />
-                  <TextInput
-                    style={[styles.projectMaterialQuantityInput, { 
-                      width: 55, 
-                      marginHorizontal: 4 
-                    }]}
-                    value={
-                      item.unit === 'Paket'
-                        ? item.quantityInput.toFixed(1).replace('.', ',')
-                        : Math.round(item.quantityInput).toString()
-                    }
-                    mode="outlined"
-                    dense
-                    keyboardType="numeric"
-                    editable={false}
-                  />
-                  <IconButton
-                    icon="plus"
-                    size={20}
-                    iconColor="white"
-                    style={[styles.projectMaterialQuantityButton, { backgroundColor: BRAND_LIGHT_BLUE }]}
-                    onPress={() => adjustRuecksendungSummaryQuantity(item.key, 1)}
-                  />
-                </>
-              )}
-              {item.key.startsWith('ruecksendung-ref-') && (
-                <TextInput
-                  style={[styles.projectMaterialQuantityInput, { 
-                    width: 55, 
-                    marginHorizontal: 0 
-                  }]}
-                  value={
-                    item.unit === 'Paket'
-                      ? item.quantityInput.toFixed(1).replace('.', ',')
-                      : Math.round(item.quantityInput).toString()
-                  }
-                  mode="outlined"
-                  dense
-                  keyboardType="numeric"
-                  editable={false}
-                />
-              )}
-            </View>
-            <Paragraph style={styles.projectMaterialUnitText}>
-              {getUnitLabel(item.unit, item.quantityInput)}
-            </Paragraph>
-          </View>
-
-          {timestamp && (
-            <View style={styles.projectMaterialLastBookingContainer}>
-              <View style={styles.projectMaterialLastBookingRow}>
-                <Paragraph style={styles.projectMaterialLastBookingText}>
-                  Letzter Warenausgang: {formatQuantityValue(item.lastBookingQuantity ?? item.quantity)}{' '}
-                  {getUnitLabel(item.lastBookingUnit || item.unit, item.lastBookingQuantity ?? item.quantity)} •{' '}
-                  {timestamp.toLocaleDateString('de-DE', {
-                    day: '2-digit',
-                    month: '2-digit',
-                    year: 'numeric',
-                  })}{' '}
-                  {timestamp.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}
-                </Paragraph>
-                <TouchableOpacity
-                  style={styles.projectMaterialHistoryButton}
-                  onPress={() => {
-                    // History für diesen Artikel öffnen
-                  }}
-                >
-                  <MaterialCommunityIcons
-                    name="dots-vertical"
-                    size={24}
-                    color={BRAND_DARK_BLUE}
-                  />
-                </TouchableOpacity>
-              </View>
-            </View>
-          )}
-        </Card.Content>
-      </Card>
-    );
-  };
-
-  // Generische Render-Funktion für alle Warenausgangstypen
-  const renderSummaryItem = (item: any, typ: string) => {
-    const timestamp = item.lastTimestamp ? new Date(item.lastTimestamp) : undefined;
-    const prefix = `${typ.toLowerCase().replace(/\s+/g, '-')}-ref-`;
-    const isSaved = item.key.startsWith(prefix);
-    
-    // Bestimme die entsprechenden States und Funktionen basierend auf Typ
-    let savingState: string | null = null;
-    let onSave: (item: any) => void = () => {};
-    let onDelete: (item: any) => void = () => {};
-    let onAdjustQuantity: (key: string, change: number) => void = () => {};
-    
-    if (typ === 'Rücksendung Lieferant') {
-      savingState = ruecksendungSummarySaving;
-      onSave = saveRuecksendungSummaryItem;
-      onDelete = deleteRuecksendungSummaryItem;
-      onAdjustQuantity = adjustRuecksendungSummaryQuantity;
-    } else if (typ === 'Projekt') {
-      savingState = projektSummarySaving;
-      onSave = (item) => saveSummaryItem(item, 'Projekt');
-      onDelete = (item) => deleteSummaryItem(item, 'Projekt');
-      onAdjustQuantity = (key, change) => adjustSummaryQuantity('Projekt', key, change);
-    } else if (typ === 'Lager') {
-      savingState = lagerSummarySaving;
-      onSave = (item) => saveSummaryItem(item, 'Lager');
-      onDelete = (item) => deleteSummaryItem(item, 'Lager');
-      onAdjustQuantity = (key, change) => adjustSummaryQuantity('Lager', key, change);
-    } else if (typ === 'Entsorgung') {
-      savingState = entsorgungSummarySaving;
-      onSave = (item) => saveSummaryItem(item, 'Entsorgung');
-      onDelete = (item) => deleteSummaryItem(item, 'Entsorgung');
-      onAdjustQuantity = (key, change) => adjustSummaryQuantity('Entsorgung', key, change);
-    }
-
-    return (
-      <Card key={item.key} style={styles.orderSummaryCard}>
-        <Card.Content>
-          <View style={styles.projectMaterialItemHeader}>
-            <View style={styles.projectMaterialItemInfo}>
-              <Title style={styles.projectMaterialItemName}>{item.name}</Title>
-              {item.sku && (
-                <Paragraph style={styles.projectMaterialItemDetails}>
-                  {item.sku}
-                </Paragraph>
-              )}
-            </View>
-            <View style={styles.projectMaterialActionButtons}>
-              {!isSaved && (
-                <IconButton
-                  icon="content-save"
-                  size={22}
-                  iconColor={BRAND_DARK_BLUE}
-                  onPress={() => onSave(item)}
-                  disabled={savingState === item.key || (item.quantityInput ?? 0) <= 0}
-                />
-              )}
-              <IconButton
-                icon="close"
-                size={22}
-                iconColor="#d32f2f"
-                onPress={() => {
-                  Alert.alert(
-                    'Artikel entfernen',
-                    `Möchten Sie wirklich "${item.name}" entfernen?${isSaved ? ' Der Artikel wird auch aus der Datenbank gelöscht.' : ''}`,
-                    [
-                      {
-                        text: 'Abbrechen',
-                        style: 'cancel',
-                      },
-                      {
-                        text: 'Entfernen',
-                        style: 'destructive',
-                        onPress: () => {
-                          onDelete(item);
-                        },
-                      },
-                    ],
-                  );
-                }}
-              />
-            </View>
-          </View>
-
-          <View style={styles.projectMaterialQuantityContainer}>
-            <Paragraph style={styles.projectMaterialQuantityLabel}>Menge:</Paragraph>
-            <View style={styles.projectMaterialQuantityControls}>
-              {!isSaved && (
-                <>
-                  <IconButton
-                    icon="minus"
-                    size={20}
-                    iconColor="white"
-                    style={[styles.projectMaterialQuantityButton, { backgroundColor: BRAND_LIGHT_BLUE }]}
-                    onPress={() => onAdjustQuantity(item.key, -1)}
-                  />
-                  <TextInput
-                    style={[styles.projectMaterialQuantityInput, { 
-                      width: 55, 
-                      marginHorizontal: 4 
-                    }]}
-                    value={
-                      item.unit === 'Paket'
-                        ? item.quantityInput.toFixed(1).replace('.', ',')
-                        : Math.round(item.quantityInput).toString()
-                    }
-                    mode="outlined"
-                    dense
-                    keyboardType="numeric"
-                    editable={false}
-                  />
-                  <IconButton
-                    icon="plus"
-                    size={20}
-                    iconColor="white"
-                    style={[styles.projectMaterialQuantityButton, { backgroundColor: BRAND_LIGHT_BLUE }]}
-                    onPress={() => onAdjustQuantity(item.key, 1)}
-                  />
-                </>
-              )}
-              {isSaved && (
-                <TextInput
-                  style={[styles.projectMaterialQuantityInput, { 
-                    width: 55, 
-                    marginHorizontal: 0 
-                  }]}
-                  value={
-                    item.unit === 'Paket'
-                      ? item.quantityInput.toFixed(1).replace('.', ',')
-                      : Math.round(item.quantityInput).toString()
-                  }
-                  mode="outlined"
-                  dense
-                  keyboardType="numeric"
-                  editable={false}
-                />
-              )}
-            </View>
-            <Paragraph style={styles.projectMaterialUnitText}>
-              {getUnitLabel(item.unit, item.quantityInput)}
-            </Paragraph>
-          </View>
-
-          {timestamp && (
-            <View style={styles.projectMaterialLastBookingContainer}>
-              <View style={styles.projectMaterialLastBookingRow}>
-                <Paragraph style={styles.projectMaterialLastBookingText}>
-                  Letzter Warenausgang: {formatQuantityValue(item.lastBookingQuantity ?? item.quantity)}{' '}
-                  {getUnitLabel(item.lastBookingUnit || item.unit, item.lastBookingQuantity ?? item.quantity)} •{' '}
-                  {timestamp.toLocaleDateString('de-DE', {
-                    day: '2-digit',
-                    month: '2-digit',
-                    year: 'numeric',
-                  })}{' '}
-                  {timestamp.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}
-                </Paragraph>
-                <TouchableOpacity
-                  style={styles.projectMaterialHistoryButton}
-                  onPress={() => {
-                    // History für diesen Artikel öffnen
-                  }}
-                >
-                  <MaterialCommunityIcons
-                    name="dots-vertical"
-                    size={24}
-                    color={BRAND_DARK_BLUE}
-                  />
-                </TouchableOpacity>
-              </View>
-            </View>
-          )}
-        </Card.Content>
-      </Card>
-    );
   };
 
   const renderWarenausgang = ({ item }: { item: Warenausgang }) => (
@@ -1960,14 +1240,14 @@ const WarenausgaengeScreen: React.FC = () => {
         )}
       </Surface>
 
-      {/* Sticky Search/Filter/Add Bar - für alle Typen wenn Artikel hinzufügen Formular sichtbar */}
-      {showArticleCard === true && (
+      {/* Sticky Search/Filter/Add Bar - immer sichtbar wenn Artikel vorhanden */}
+      {items.length > 0 && (
         <View style={styles.stickyBar}>
           <View style={styles.stickyBarContainer}>
             <TextInput
               style={styles.searchInput}
-              value={searchQuery}
-              onChangeText={setSearchQuery}
+              value={productSearchQuery}
+              onChangeText={setProductSearchQuery}
               placeholder="Artikel suchen..."
               mode="outlined"
               dense
@@ -1978,10 +1258,7 @@ const WarenausgaengeScreen: React.FC = () => {
               size={24}
               iconColor={BRAND_DARK_BLUE}
               onPress={() => {
-                if (filter.length === 0) {
-                  setFilter(['alle']);
-                }
-                // TODO: Filter-Menü öffnen
+                // Filter functionality can be added here
               }}
               mode="contained-tonal"
               containerColor="#eef2f7"
@@ -1991,10 +1268,7 @@ const WarenausgaengeScreen: React.FC = () => {
               icon="plus"
               size={24}
               iconColor="#fff"
-              onPress={() => {
-                // Artikel hinzufügen - öffne Produktliste
-                loadAllProducts();
-              }}
+              onPress={addNewItem}
               mode="contained"
               containerColor={BRAND_LIGHT_BLUE}
               style={[styles.stickyIconButton, styles.stickyAddButton]}
@@ -2003,7 +1277,14 @@ const WarenausgaengeScreen: React.FC = () => {
         </View>
       )}
 
-      <ScrollView style={styles.formContainer} showsVerticalScrollIndicator={false}>
+      {/* Gesamter Inhalt scrollbar - Kopfbereich + Body-Bereich */}
+      <ScrollView 
+        style={styles.mainScrollView}
+        showsVerticalScrollIndicator={true}
+        contentContainerStyle={styles.scrollViewContent}
+      >
+        {/* Kopfbereich - vollständig sichtbar, nicht scrollbar */}
+        <View style={styles.formContainer}>
         {/* Formular */}
         <Card style={styles.formCard}>
           <Card.Content>
@@ -2030,75 +1311,7 @@ const WarenausgaengeScreen: React.FC = () => {
               </TouchableOpacity>
             </View>
 
-            {/* Referenz */}
-            <View style={styles.formField}>
-              <Paragraph style={styles.fieldLabel}>Referenz:</Paragraph>
-              <View style={styles.inputContainer}>
-                <TextInput
-                  style={[styles.textInput, { flex: 1 }]}
-                  value={referenz}
-                  onChangeText={(text) => {
-                    setReferenz(text);
-                    // Reset summary items wenn Referenz geändert wird
-                    if (warenausgangstyp === 'Rücksendung Lieferant') {
-                      setRuecksendungSummaryItems([]);
-                    } else if (warenausgangstyp === 'Projekt') {
-                      setProjektSummaryItems([]);
-                    } else if (warenausgangstyp === 'Lager') {
-                      setLagerSummaryItems([]);
-                    } else if (warenausgangstyp === 'Entsorgung') {
-                      setEntsorgungSummaryItems([]);
-                    }
-                  }}
-                  placeholder="z.B. WA-2025-001"
-                  mode="outlined"
-                  dense
-                />
-                {warenausgangstyp !== 'Rücksendung Lieferant' && warenausgangstyp !== 'Projekt' && warenausgangstyp !== 'Lager' && warenausgangstyp !== 'Entsorgung' && (
-                <IconButton
-                  icon="magnify"
-                  size={24}
-                  iconColor={BRAND_DARK_BLUE}
-                  onPress={handleReferenzSearch}
-                  style={styles.iconButton}
-                />
-                )}
-              </View>
-            </View>
-
-            {/* Lieferant - nur bei Rücksendung Lieferant */}
-            {warenausgangstyp === 'Rücksendung Lieferant' && (
-              <View style={styles.formField}>
-                <Paragraph style={styles.fieldLabel}>Lieferant:</Paragraph>
-                <TextInput
-                  style={styles.textInput}
-                  value={lieferant}
-                  onChangeText={setLieferant}
-                  placeholder="Lieferant Name"
-                  mode="outlined"
-                  dense
-                />
-              </View>
-            )}
-
-            {/* Bemerkung - nur bei Rücksendung Lieferant */}
-            {warenausgangstyp === 'Rücksendung Lieferant' && (
-              <View style={styles.formField}>
-                <Paragraph style={styles.fieldLabel}>Bemerkung:</Paragraph>
-                <TextInput
-                  style={styles.textInput}
-                  value={bemerkung}
-                  onChangeText={setBemerkung}
-                  placeholder="Bemerkung (optional)"
-                  mode="outlined"
-                  dense
-                  multiline
-                  numberOfLines={3}
-                />
-              </View>
-            )}
-
-            {/* Projekt-Auswahl - nur bei Projekt */}
+            {/* Projektnummer - nur bei Projekt */}
             {warenausgangstyp === 'Projekt' && (
               <View style={styles.formField}>
                 <Paragraph style={styles.fieldLabel}>Projektnummer:</Paragraph>
@@ -2117,7 +1330,7 @@ const WarenausgaengeScreen: React.FC = () => {
                   />
                   <IconButton
                     icon="magnify"
-                    size={24}
+                    size={20}
                     iconColor={BRAND_DARK_BLUE}
                     onPress={openProjectSearch}
                     style={styles.iconButton}
@@ -2126,33 +1339,289 @@ const WarenausgaengeScreen: React.FC = () => {
               </View>
             )}
 
-            {/* Lagerort */}
+            {/* Referenz */}
             <View style={styles.formField}>
-              <Paragraph style={styles.fieldLabel}>Lagerort:</Paragraph>
-              {userLocations.length > 1 ? (
-                // Mehrere Lagerorte - Dropdown anzeigen
+              <Paragraph style={styles.fieldLabel}>Referenz:</Paragraph>
+              <View style={styles.inputContainer}>
+                <TextInput
+                  style={[styles.textInput, { flex: 1 }]}
+                  value={referenz}
+                  onChangeText={setReferenz}
+                  placeholder="z.B. WA-2025-001"
+                  mode="outlined"
+                  dense
+                />
+                {warenausgangstyp !== 'Projekt' && warenausgangstyp !== 'Rücksendung Lieferant' && warenausgangstyp !== 'Lager' && warenausgangstyp !== 'Entsorgung' && (
+                  <IconButton
+                    icon="magnify"
+                    size={24}
+                    iconColor={BRAND_DARK_BLUE}
+                    onPress={handleReferenzSearch}
+                    style={styles.iconButton}
+                  />
+                )}
+              </View>
+            </View>
+
+            {/* Lieferant - bei Projekt, Rücksendung Lieferant und Entsorgung */}
+            {(warenausgangstyp === 'Projekt' || warenausgangstyp === 'Rücksendung Lieferant' || warenausgangstyp === 'Entsorgung') && (
+              <View style={styles.formField}>
+                <Paragraph style={styles.fieldLabel}>Lieferant:</Paragraph>
+                <View style={styles.inputContainer}>
+                  <TextInput
+                    style={[styles.textInput, { flex: 1 }]}
+                    value={lieferant}
+                    onChangeText={setLieferant}
+                    placeholder="Lieferant suchen..."
+                    mode="outlined"
+                    dense
+                  />
+                  <IconButton
+                    icon="magnify"
+                    size={20}
+                    iconColor={BRAND_DARK_BLUE}
+                    onPress={() => {
+                      // Lieferant-Suche kann hier implementiert werden
+                    }}
+                    style={styles.iconButton}
+                  />
+                </View>
+              </View>
+            )}
+
+
+            {/* Anzahl und Einheit - bei keinem Warenausgangstyp mehr im Kopfbereich */}
+            {false && (
+              <View style={styles.formField}>
+                <View style={styles.quantityAndUnitRow}>
+                  <View style={styles.quantitySection}>
+                    <Paragraph style={styles.fieldLabel}>Anzahl:</Paragraph>
+                    <View style={styles.quantityContainer}>
+                      <IconButton
+                        icon="minus"
+                        mode="contained"
+                        size={20}
+                        onPress={decrementAnzahl}
+                        style={styles.quantityButton}
+                        iconColor="white"
+                      />
+                      <TextInput
+                        style={styles.quantityInput}
+                        value={anzahl.toString()}
+                        onChangeText={handleAnzahlTextChange}
+                        mode="outlined"
+                        dense
+                        keyboardType="numeric"
+                        selectTextOnFocus
+                      />
+                      <IconButton
+                        icon="plus"
+                        mode="contained"
+                        size={20}
+                        onPress={incrementAnzahl}
+                        style={styles.quantityButton}
+                        iconColor="white"
+                      />
+                    </View>
+                    
+                    {/* Lagerbestands-Anzeige */}
+                    {selectedProduct && (
+                      <View style={styles.stockInfoContainer}>
+                        <Paragraph style={[
+                          styles.stockInfoText,
+                          anzahl > selectedProduct.stockQuantity && styles.stockExceededText
+                        ]}>
+                          Verfügbar: {selectedProduct.stockQuantity} Stück
+                          {anzahl > selectedProduct.stockQuantity && ' ⚠️ Überschritten!'}
+                        </Paragraph>
+                      </View>
+                    )}
+                  </View>
+                  
+                  {selectedProduct && (
+                    <View style={styles.unitSection}>
+                      <Paragraph style={styles.fieldLabel}>Einheit:</Paragraph>
+                      <Menu
+                        visible={unitMenuVisible && currentItemIndexForProductSelection === null}
+                        onDismiss={() => {
+                          setUnitMenuVisible(false);
+                          setCurrentItemIndexForProductSelection(null);
+                        }}
+                        anchor={
+                          <TouchableOpacity
+                            style={styles.unitDropdownButton}
+                            onPress={() => {
+                              if (unitMenuVisible && currentItemIndexForProductSelection === null) {
+                                setUnitMenuVisible(false);
+                                setCurrentItemIndexForProductSelection(null);
+                              } else {
+                                setCurrentItemIndexForProductSelection(null);
+                                setTimeout(() => {
+                                  setUnitMenuVisible(true);
+                                }, 50);
+                              }
+                            }}
+                          >
+                            <Paragraph style={styles.unitDropdownText}>
+                              {selectedUnit || selectedProduct?.unit || 'Stück'}
+                            </Paragraph>
+                            <MaterialCommunityIcons 
+                              name="chevron-down" 
+                              size={20} 
+                              color={BRAND_DARK_BLUE} 
+                            />
+                          </TouchableOpacity>
+                        }
+                      >
+                        {(() => {
+                          const units = ['Stück', 'Palette', 'Paket'];
+                          if (selectedProduct?.unit && !units.includes(selectedProduct.unit)) {
+                            units.push(selectedProduct.unit);
+                          }
+                          return units.map((unit) => (
+                            <Menu.Item
+                              key={unit}
+                              onPress={() => {
+                                setSelectedUnit(unit);
+                                setUnitMenuVisible(false);
+                                setCurrentItemIndexForProductSelection(null);
+                              }}
+                              title={unit}
+                              titleStyle={styles.menuItemText}
+                            />
+                          ));
+                        })()}
+                      </Menu>
+                    </View>
+                  )}
+                </View>
+              </View>
+            )}
+
+            {/* Entsorgungsgrund - nur bei Entsorgung */}
+            {warenausgangstyp === 'Entsorgung' && (
+              <View style={styles.formField}>
+                <Paragraph style={styles.fieldLabel}>Entsorgungsgrund:</Paragraph>
                 <View style={styles.dropdownContainer}>
                   <TouchableOpacity
                     style={styles.dropdownButton}
-                    onPress={() => setLagerortDialogVisible(true)}
+                    onPress={() => setAuswahlGrundDialogVisible(true)}
                   >
-                    <Paragraph style={styles.dropdownText}>{lagerort || 'Lagerort auswählen'}</Paragraph>
+                    <Paragraph style={styles.dropdownText}>
+                      {auswahlGrund || 'Entsorgungsgrund wählen'}
+                    </Paragraph>
                     <IconButton icon="chevron-down" size={20} iconColor={BRAND_DARK_BLUE} />
                   </TouchableOpacity>
                 </View>
-              ) : (
-                // Ein oder kein Lagerort - TextInput (disabled wenn automatisch gesetzt)
+              </View>
+            )}
+
+            {/* Lagerort - Bei "Lager" zwei Felder: Von Lagerort und Nach Lagerort */}
+            {warenausgangstyp === 'Lager' ? (
+              <>
+                {/* Von Lagerort */}
+                <View style={styles.formField}>
+                  <Paragraph style={styles.fieldLabel}>Von Lagerort:</Paragraph>
+                  {userLocations.length > 1 ? (
+                    <View style={styles.dropdownContainer}>
+                      <TouchableOpacity
+                        style={styles.dropdownButton}
+                        onPress={() => {
+                          setVonLagerortDialogVisible(true);
+                        }}
+                      >
+                        <Paragraph style={styles.dropdownText}>{vonLagerort || lagerort || 'Lagerort auswählen'}</Paragraph>
+                        <IconButton icon="chevron-down" size={20} iconColor={BRAND_DARK_BLUE} />
+                      </TouchableOpacity>
+                    </View>
+                  ) : (
+                    <TextInput
+                      style={styles.textInput}
+                      value={vonLagerort || lagerort}
+                      onChangeText={(text) => {
+                        setVonLagerort(text);
+                        setLagerort(text);
+                      }}
+                      mode="outlined"
+                      dense
+                      placeholder="Von Lagerort"
+                      editable={userLocations.length === 0}
+                    />
+                  )}
+                </View>
+                
+                {/* Nach Lagerort */}
+                <View style={styles.formField}>
+                  <Paragraph style={styles.fieldLabel}>Nach Lagerort:</Paragraph>
+                  {allLocations.length > 0 ? (
+                    <View style={styles.dropdownContainer}>
+                      <TouchableOpacity
+                        style={styles.dropdownButton}
+                        onPress={() => setNachLagerortDialogVisible(true)}
+                      >
+                        <Paragraph style={styles.dropdownText}>{nachLagerort || 'Lagerort auswählen'}</Paragraph>
+                        <IconButton icon="chevron-down" size={20} iconColor={BRAND_DARK_BLUE} />
+                      </TouchableOpacity>
+                    </View>
+                  ) : (
+                    <TextInput
+                      style={styles.textInput}
+                      value={nachLagerort}
+                      onChangeText={setNachLagerort}
+                      mode="outlined"
+                      dense
+                      placeholder="Nach Lagerort"
+                      editable={true}
+                    />
+                  )}
+                </View>
+              </>
+            ) : (
+              /* Normales Lagerort-Feld für andere Warenausgangstypen */
+              <View style={styles.formField}>
+                <Paragraph style={styles.fieldLabel}>Lagerort:</Paragraph>
+                {userLocations.length > 1 ? (
+                  // Mehrere Lagerorte - Dropdown anzeigen
+                  <View style={styles.dropdownContainer}>
+                    <TouchableOpacity
+                      style={styles.dropdownButton}
+                      onPress={() => setLagerortDialogVisible(true)}
+                    >
+                      <Paragraph style={styles.dropdownText}>{lagerort || 'Lagerort auswählen'}</Paragraph>
+                      <IconButton icon="chevron-down" size={20} iconColor={BRAND_DARK_BLUE} />
+                    </TouchableOpacity>
+                  </View>
+                ) : (
+                  // Ein oder kein Lagerort - TextInput (disabled wenn automatisch gesetzt)
+                  <TextInput
+                    style={styles.textInput}
+                    value={lagerort}
+                    onChangeText={setLagerort}
+                    mode="outlined"
+                    dense
+                    placeholder="Lagerort"
+                    editable={userLocations.length === 0}
+                  />
+                )}
+              </View>
+            )}
+
+            {/* Bemerkung - nicht bei Projekt */}
+            {warenausgangstyp !== 'Projekt' && (
+              <View style={styles.formField}>
+                <Paragraph style={styles.fieldLabel}>Bemerkung:</Paragraph>
                 <TextInput
                   style={styles.textInput}
-                  value={lagerort}
-                  onChangeText={setLagerort}
+                  value={bemerkung}
+                  onChangeText={setBemerkung}
+                  placeholder="Bemerkung (optional)"
                   mode="outlined"
                   dense
-                  placeholder="Lagerort"
-                  editable={userLocations.length === 0}
+                  multiline
+                  numberOfLines={3}
                 />
-              )}
-            </View>
+              </View>
+            )}
 
             {/* Begründung für negative Lager */}
             {showBegruendungField && (
@@ -2188,903 +1657,31 @@ const WarenausgaengeScreen: React.FC = () => {
 
           </Card.Content>
         </Card>
+      </View>
 
-        {/* Rücksendung Lieferant Materials View - wenn Warenausgangstyp "Rücksendung Lieferant" */}
-        {warenausgangstyp === 'Rücksendung Lieferant' ? (
-          <Card style={[styles.articleCard, styles.articleCardSpacing]}>
-            <Card.Content>
-              {/* Titel nur anzeigen wenn Artikel hinzufügen geklickt wurde oder Artikel vorhanden sind */}
-              {(showArticleCard === true || ruecksendungSummaryItems.length > 0) && (
-                <Surface style={{ backgroundColor: '#f5f5f5', padding: 16, borderRadius: 8, marginBottom: 16 }}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <Title style={{ fontSize: 18, fontWeight: 'bold' }}>
-                      Rücksendung Lieferant
-                    </Title>
-          </View>
-                  {referenz.trim().length > 0 && (
-                    <Paragraph style={{ marginTop: 8, color: '#666' }}>
-                      Referenz: {referenz.trim()}
-                    </Paragraph>
-                  )}
-                  {bemerkung.trim().length > 0 && (
-                    <Paragraph style={{ marginTop: 4, color: '#666' }}>
-                      Bemerkung: {bemerkung.trim()}
-                    </Paragraph>
-                  )}
-                </Surface>
-              )}
-
-              {ruecksendungSummaryItems.length > 0 && (
-                <View style={styles.projectMaterialsListContainer}>
-                  {ruecksendungSummaryItems.map((item, index) => (
-                    <View key={`${item.key}-${index}`}>
-                      {renderRuecksendungSummaryItem(item)}
-                    </View>
-                  ))}
-                </View>
-              )}
-
-              {/* Artikel hinzufügen Button - nur wenn keine Artikel vorhanden */}
-              {ruecksendungSummaryItems.length === 0 && showArticleCard === false ? (
-              <View style={styles.articleEmptyState}>
-                <Paragraph style={styles.articleEmptyText}>
-                    Keine Artikel hinzugefügt. Klicken Sie auf „Artikel hinzufügen" um zu beginnen.
-                </Paragraph>
-                <Button
-                  mode="contained"
-                  icon="plus"
-                  onPress={handleAddArticleCard}
-                  style={styles.articleAddButton}
-                  buttonColor={BRAND_LIGHT_BLUE}
-                  compact
-                >
-                  Artikel hinzufügen
-                </Button>
-              </View>
-              ) : null}
-
-              {/* Artikel hinzufügen Formular */}
-              {showArticleCard === true ? (
-              <View style={styles.articleItemCard}>
-                <View style={styles.articleItemHeader}>
-                    <Title style={styles.articleItemTitle}>
-                      {selectedProduct ? selectedProduct.name : 'Artikel hinzufügen'}
-                    </Title>
-                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                  <IconButton
-                      icon="content-save"
-                      size={20}
-                      iconColor={BRAND_DARK_BLUE}
-                      onPress={() => {
-                        if (warenausgangstyp === 'Rücksendung Lieferant') {
-                          handleAddArticleCard();
-                        }
-                      }}
-                      disabled={!selectedProduct && !artikelnummer.trim()}
-                    />
-                    <IconButton
-                      icon="close"
-                    size={20}
-                    iconColor="#d32f2f"
-                    onPress={clearArticleCard}
-                  />
-                </View>
-                </View>
-                  <>
-              <View style={styles.formField}>
-                <Paragraph style={styles.fieldLabel}>Artikelnummer:</Paragraph>
-                <View style={styles.inputContainer}>
-                  <TextInput
-                    style={styles.artikelnummerInput}
-                    value={artikelnummer}
-                    onChangeText={(text) => {
-                      setArtikelnummer(text);
-                            setSelectedProduct(null);
-                    }}
-                    placeholder="z.B. DELL-XPS13-001"
-                    mode="outlined"
-                    dense
-                    autoCapitalize="characters"
-                    autoCorrect={false}
-                    keyboardType="default"
-                    returnKeyType="done"
-                  />
-                  <IconButton
-                    icon="magnify"
-                    size={24}
-                    iconColor={BRAND_DARK_BLUE}
-                    onPress={loadAllProducts}
-                    style={styles.iconButton}
-                  />
-                  <IconButton
-                    icon="barcode-scan"
-                    size={24}
-                    iconColor={BRAND_DARK_BLUE}
-                    onPress={openScanner}
-                    style={styles.iconButton}
-                  />
-                </View>
-              </View>
-
-            <View style={styles.formField}>
-              <View style={styles.quantityAndUnitRow}>
-                <View style={styles.quantitySection}>
-                  <Paragraph style={styles.fieldLabel}>Menge:</Paragraph>
-                  <View style={styles.quantityContainer}>
-                    <IconButton
-                      icon="minus"
-                      mode="contained"
-                      size={20}
-                      onPress={decrementAnzahl}
-                      style={styles.quantityButton}
-                      iconColor="white"
-                    />
-                    <TextInput
-                      style={styles.quantityInput}
-                      value={anzahl.toString()}
-                      onChangeText={handleAnzahlTextChange}
-                      mode="outlined"
-                      dense
-                      keyboardType="numeric"
-                      selectTextOnFocus
-                    />
-                    <IconButton
-                      icon="plus"
-                      mode="contained"
-                      size={20}
-                      onPress={incrementAnzahl}
-                      style={styles.quantityButton}
-                      iconColor="white"
-                    />
-                  </View>
-                  
-                  {selectedProduct && (
-                    <View style={styles.stockInfoContainer}>
-                              <Paragraph
-                                style={[
-                        styles.stockInfoText,
-                                  anzahl > selectedProduct.stockQuantity && styles.stockExceededText,
-                                ]}
-                              >
-                        Verfügbar: {selectedProduct.stockQuantity} Stück
-                        {anzahl > selectedProduct.stockQuantity && ' ⚠️ Überschritten!'}
-                      </Paragraph>
-                    </View>
-                  )}
-                </View>
-                
-                {selectedProduct && (
-                  <View style={styles.unitSection}>
-                    <Paragraph style={styles.fieldLabel}>Einheit:</Paragraph>
-                    <TouchableOpacity
-                      style={styles.unitDropdownButton}
-                      onPress={() => setUnitDialogVisible(true)}
-                    >
-                      <Paragraph style={styles.unitDropdownText}>
-                        {selectedUnit || 'Einheit wählen'}
-                      </Paragraph>
-                      <MaterialCommunityIcons 
-                        name="chevron-down" 
-                        size={20} 
-                        color={BRAND_DARK_BLUE} 
-                      />
-                    </TouchableOpacity>
-                  </View>
-                )}
-              </View>
-            </View>
-                  </>
-            </View>
-              ) : null}
-          </Card.Content>
-        </Card>
-        ) : null}
-
-        {/* Bodybereich für alle Warenausgangstypen */}
-        {warenausgangstyp && warenausgangstyp !== 'Rücksendung Lieferant' && (
-          <Card style={[styles.articleCard, styles.articleCardSpacing]}>
-            <Card.Content>
-              {/* Titel nur anzeigen wenn Artikel hinzufügen geklickt wurde oder Artikel vorhanden sind */}
-              {(showArticleCard === true || 
-                (warenausgangstyp === 'Projekt' && projektSummaryItems.length > 0) ||
-                (warenausgangstyp === 'Lager' && lagerSummaryItems.length > 0) ||
-                (warenausgangstyp === 'Entsorgung' && entsorgungSummaryItems.length > 0)) && (
-                <Surface style={{ backgroundColor: '#f5f5f5', padding: 16, borderRadius: 8, marginBottom: 16 }}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <Title style={{ fontSize: 18, fontWeight: 'bold' }}>
-                      {warenausgangstyp}
-                    </Title>
-                  </View>
-                  {referenz.trim().length > 0 && (
-                    <Paragraph style={{ marginTop: 8, color: '#666' }}>
-                      Referenz: {referenz.trim()}
-                    </Paragraph>
-                  )}
-                  {warenausgangstyp === 'Projekt' && projektnummer.trim().length > 0 && (
-                    <Paragraph style={{ marginTop: 4, color: '#666' }}>
-                      Projektnummer: {projektnummer.trim()}
-                    </Paragraph>
-                  )}
-                  {bemerkung.trim().length > 0 && (
-                    <Paragraph style={{ marginTop: 4, color: '#666' }}>
-                      Bemerkung: {bemerkung.trim()}
-                    </Paragraph>
-                  )}
-                </Surface>
-              )}
-
-              {/* Summary Items für Projekt */}
-              {warenausgangstyp === 'Projekt' && projektSummaryItems.length > 0 && (
-                <View style={styles.projectMaterialsListContainer}>
-                  {projektSummaryItems.map((item, index) => (
-                    <View key={`${item.key}-${index}`}>
-                      {renderSummaryItem(item, 'Projekt')}
-                    </View>
-                  ))}
-                </View>
-              )}
-
-              {/* Summary Items für Lager */}
-              {warenausgangstyp === 'Lager' && lagerSummaryItems.length > 0 && (
-                <View style={styles.projectMaterialsListContainer}>
-                  {lagerSummaryItems.map((item, index) => (
-                    <View key={`${item.key}-${index}`}>
-                      {renderSummaryItem(item, 'Lager')}
-                    </View>
-                  ))}
-                </View>
-              )}
-
-              {/* Summary Items für Entsorgung */}
-              {warenausgangstyp === 'Entsorgung' && entsorgungSummaryItems.length > 0 && (
-                <View style={styles.projectMaterialsListContainer}>
-                  {entsorgungSummaryItems.map((item, index) => (
-                    <View key={`${item.key}-${index}`}>
-                      {renderSummaryItem(item, 'Entsorgung')}
-                    </View>
-                  ))}
-                </View>
-              )}
-
-              {/* Artikel hinzufügen Button - nur wenn keine Artikel vorhanden */}
-              {((warenausgangstyp === 'Projekt' && projektSummaryItems.length === 0) ||
-                (warenausgangstyp === 'Lager' && lagerSummaryItems.length === 0) ||
-                (warenausgangstyp === 'Entsorgung' && entsorgungSummaryItems.length === 0)) && 
-                showArticleCard === false ? (
-                <View style={styles.articleEmptyState}>
-                  <Paragraph style={styles.articleEmptyText}>
-                    Keine Artikel hinzugefügt. Klicken Sie auf „Artikel hinzufügen" um zu beginnen.
-                  </Paragraph>
-                  <Button
-                    mode="contained"
-                    icon="plus"
-                    onPress={handleAddArticleCard}
-                    style={styles.articleAddButton}
-                    buttonColor={BRAND_LIGHT_BLUE}
-                    compact
-                  >
-                    Artikel hinzufügen
-                  </Button>
-                </View>
-              ) : null}
-
-              {/* Artikel hinzufügen Formular */}
-              {showArticleCard === true ? (
-                <View style={styles.articleItemCard}>
-                  <View style={styles.articleItemHeader}>
-                    <Title style={styles.articleItemTitle}>
-                      {selectedProduct ? selectedProduct.name : 'Artikel hinzufügen'}
-                    </Title>
-                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                      <IconButton
-                        icon="content-save"
-                        size={20}
-                        iconColor={BRAND_DARK_BLUE}
-                        onPress={handleAddArticleCard}
-                        disabled={!selectedProduct && !artikelnummer.trim()}
-                      />
-                      <IconButton
-                        icon="close"
-                        size={20}
-                        iconColor="#d32f2f"
-                        onPress={clearArticleCard}
-                      />
-                    </View>
-                  </View>
-                  <>
-                    <View style={styles.formField}>
-                      <Paragraph style={styles.fieldLabel}>Artikelnummer:</Paragraph>
-                      <View style={styles.inputContainer}>
-                        <TextInput
-                          style={styles.artikelnummerInput}
-                          value={artikelnummer}
-                          onChangeText={(text) => {
-                            setArtikelnummer(text);
-                            setSelectedProduct(null);
-                          }}
-                          placeholder="z.B. DELL-XPS13-001"
-                          mode="outlined"
-                          dense
-                          autoCapitalize="characters"
-                          autoCorrect={false}
-                          keyboardType="default"
-                          returnKeyType="done"
-                        />
-                        <IconButton
-                          icon="magnify"
-                          size={24}
-                          iconColor={BRAND_DARK_BLUE}
-                          onPress={loadAllProducts}
-                          style={styles.iconButton}
-                        />
-                        <IconButton
-                          icon="barcode-scan"
-                          size={24}
-                          iconColor={BRAND_DARK_BLUE}
-                          onPress={openScanner}
-                          style={styles.iconButton}
-                        />
-                      </View>
-                    </View>
-
-                    <View style={styles.formField}>
-                      <View style={styles.quantityAndUnitRow}>
-                        <View style={styles.quantitySection}>
-                          <Paragraph style={styles.fieldLabel}>Menge:</Paragraph>
-                          <View style={styles.quantityContainer}>
-                            <IconButton
-                              icon="minus"
-                              mode="contained"
-                              size={20}
-                              onPress={decrementAnzahl}
-                              style={styles.quantityButton}
-                              iconColor="white"
-                            />
-                            <TextInput
-                              style={styles.quantityInput}
-                              value={anzahl.toString()}
-                              onChangeText={handleAnzahlTextChange}
-                              mode="outlined"
-                              dense
-                              keyboardType="numeric"
-                              selectTextOnFocus
-                            />
-                            <IconButton
-                              icon="plus"
-                              mode="contained"
-                              size={20}
-                              onPress={incrementAnzahl}
-                              style={styles.quantityButton}
-                              iconColor="white"
-                            />
-                          </View>
-                          
-                          {selectedProduct && (
-                            <View style={styles.stockInfoContainer}>
-                              <Paragraph
-                                style={[
-                                  styles.stockInfoText,
-                                  anzahl > selectedProduct.stockQuantity && styles.stockExceededText,
-                                ]}
-                              >
-                                Verfügbar: {selectedProduct.stockQuantity} Stück
-                                {anzahl > selectedProduct.stockQuantity && ' ⚠️ Überschritten!'}
-                              </Paragraph>
-                            </View>
-                          )}
-                        </View>
-                        
-                        {selectedProduct && (
-                          <View style={styles.unitSection}>
-                            <Paragraph style={styles.fieldLabel}>Einheit:</Paragraph>
-                            <TouchableOpacity
-                              style={styles.unitDropdownButton}
-                              onPress={() => setUnitDialogVisible(true)}
-                            >
-                              <Paragraph style={styles.unitDropdownText}>
-                                {selectedUnit || 'Einheit wählen'}
-                              </Paragraph>
-                              <MaterialCommunityIcons 
-                                name="chevron-down" 
-                                size={20} 
-                                color={BRAND_DARK_BLUE} 
-                              />
-                            </TouchableOpacity>
-                          </View>
-                        )}
-                      </View>
-                    </View>
-                  </>
-                </View>
-              ) : null}
-            </Card.Content>
-          </Card>
-        )}
-
-        {warenausgangstyp !== 'Rücksendung Lieferant' && warenausgangstyp !== 'Projekt' && warenausgangstyp !== 'Lager' && warenausgangstyp !== 'Entsorgung' && (
-        <Card style={[styles.historyCard, styles.articleCardSpacing]}>
+        {/* Bodybereich - scrollbar */}
+        <Card style={styles.bodyCard}>
           <Card.Content>
-            <Title style={styles.historyTitle}>
-              Letzte Warenausgänge
-            </Title>
-            {(() => {
-              // Spezielle Behandlung für "Rücksendung Lieferant"
-              if (warenausgangstyp === 'Rücksendung Lieferant') {
-                // Filtere nach aktueller Referenz
-                // Historie für Rücksendung Lieferant ist ausgeblendet
-                return null;
-              }
-              if (false) {
-                const currentReferenz = (referenz || '').trim();
-                
-                // Wenn keine Referenz vorhanden ist, zeige nichts in der Historie an
-                if (!currentReferenz) {
-                  return (
-                    <Paragraph style={styles.emptyText}>
-                      Keine Referenz eingegeben. Bitte geben Sie eine Referenz ein, um die Historie anzuzeigen.
-                    </Paragraph>
-                  );
-                }
-                
-                // Filtere Warenausgänge nach aktueller Referenz
-                const currentRuecksendungWarenausgaenge = warenausgaenge.filter(w => {
-                  if (w.attribut !== 'Rücksendung Lieferant') return false;
-                  if (!w.notes && !w.orderNumber) return false;
-                  // Extrahiere Referenz aus notes oder verwende orderNumber
-                  const referenzMatch = w.notes?.match(/Referenz:\s*(.+?)(?:\s*\||$)/);
-                  const extractedReferenz = referenzMatch ? referenzMatch[1].trim() : (w.orderNumber || '').trim();
-                  return extractedReferenz === currentReferenz;
-                });
-                
-                // Kombiniere gespeicherte Warenausgänge mit aktuellen ruecksendungSummaryItems
-                // Aber vermeide Doppelungen: Wenn Artikel bereits in ruecksendungSummaryItems sind (aus DB geladen),
-                // zeige sie nicht in der Historie an
-                const ruecksendungSummaryItemIds = new Set(
-                  ruecksendungSummaryItems
-                    .filter(item => item.key.startsWith('ruecksendung-ref-'))
-                    .map(item => {
-                      // Extrahiere die ID aus dem key (z.B. "ruecksendung-ref-123-0" -> "123")
-                      const match = item.key.match(/ruecksendung-ref-(\d+)/);
-                      return match ? parseInt(match[1]) : null;
-                    })
-                    .filter(id => id !== null)
-                );
-                
-                // Filtere Artikel, die bereits in ruecksendungSummaryItems sind
-                const filteredRuecksendungWarenausgaenge = currentRuecksendungWarenausgaenge.filter(w => {
-                  // Wenn eine Referenz vorhanden ist und der Artikel bereits in ruecksendungSummaryItems ist,
-                  // zeige ihn nicht in der Historie an (wird bereits im Bodybereich angezeigt)
-                  if (currentReferenz && ruecksendungSummaryItemIds.has(w.id)) {
-                    return false;
-                  }
-                  return true;
-                });
-                
-                const allRuecksendungItems: any[] = [...filteredRuecksendungWarenausgaenge];
-                
-                // Extrahiere Bemerkung, Lieferant und Lagerort aus gespeicherten Items, falls aktuelle Werte leer sind
-                let extractedBemerkung = (bemerkung || '').trim();
-                let extractedLieferant = (lieferant || '').trim();
-                let extractedLagerort = (lagerort || '').trim();
-                
-                // Versuche Werte aus gespeicherten Items zu extrahieren
-                // Priorisiere die neuesten Items (die zuerst in der Liste stehen, da sie nach Zeitstempel sortiert sind)
-                for (const item of currentRuecksendungWarenausgaenge) {
-                  if (item?.notes) {
-                    const notes = item.notes;
-                    const bemerkungMatch = notes.match(/Bemerkung:\s*(.+?)(?:\s*\||$)/);
-                    const lieferantMatch = notes.match(/Lieferant:\s*(.+?)(?:\s*\||$)/);
-                    const lagerortMatch = notes.match(/Lagerort:\s*(.+?)(?:\s*\||$)/);
-                    
-                    // Verwende extrahierte Werte nur wenn State-Werte leer sind
-                    if (!extractedBemerkung && bemerkungMatch) {
-                      extractedBemerkung = bemerkungMatch[1].trim();
-                    }
-                    if (!extractedLieferant && lieferantMatch) {
-                      extractedLieferant = lieferantMatch[1].trim();
-                    }
-                    if (!extractedLagerort && lagerortMatch) {
-                      extractedLagerort = lagerortMatch[1].trim();
-                    }
-                  }
-                  
-                  // Wenn alle Werte gefunden wurden, können wir früher stoppen
-                  if (extractedBemerkung && extractedLieferant && extractedLagerort) {
-                    break;
-                  }
-                }
-                
-                // Falls immer noch Werte fehlen, versuche sie aus dem neuesten Item zu extrahieren
-                if (currentRuecksendungWarenausgaenge.length > 0 && (!extractedBemerkung || !extractedLieferant || !extractedLagerort)) {
-                  const newestItem = currentRuecksendungWarenausgaenge[0];
-                  if (newestItem?.notes) {
-                    const notes = newestItem.notes;
-                    const bemerkungMatch = notes.match(/Bemerkung:\s*(.+?)(?:\s*\||$)/);
-                    const lieferantMatch = notes.match(/Lieferant:\s*(.+?)(?:\s*\||$)/);
-                    const lagerortMatch = notes.match(/Lagerort:\s*(.+?)(?:\s*\||$)/);
-                    
-                    if (!extractedBemerkung && bemerkungMatch) {
-                      extractedBemerkung = bemerkungMatch[1].trim();
-                    }
-                    if (!extractedLieferant && lieferantMatch) {
-                      extractedLieferant = lieferantMatch[1].trim();
-                    }
-                    if (!extractedLagerort && lagerortMatch) {
-                      extractedLagerort = lagerortMatch[1].trim();
-                    }
-                  }
-                }
-                
-                // Priorisiere IMMER aktuelle Werte aus dem State, dann extrahierte Werte
-                const effectiveBemerkung = (bemerkung && bemerkung.trim()) ? bemerkung.trim() : extractedBemerkung;
-                const effectiveLieferant = (lieferant && lieferant.trim()) ? lieferant.trim() : extractedLieferant;
-                const effectiveLagerort = (lagerort && lagerort.trim()) ? lagerort.trim() : extractedLagerort;
-                
-                // Füge nur neue ruecksendungSummaryItems hinzu (die nicht aus DB geladen wurden)
-                if (ruecksendungSummaryItems.length > 0) {
-                  ruecksendungSummaryItems.forEach(item => {
-                    // Überspringe Artikel, die aus der DB geladen wurden (werden bereits im Bodybereich angezeigt)
-                    if (item.key.startsWith('ruecksendung-ref-')) {
-                      return;
-                    }
-                    
-                    // Finde Produkt-Informationen
-                    const product = allProducts.find(p => p.id === item.productId);
-                    if (product) {
-                      // Erstelle notes mit allen Informationen
-                      const tempNotesParts: string[] = [];
-                      if (currentReferenz) {
-                        tempNotesParts.push(`Referenz: ${currentReferenz}`);
-                      }
-                      if (effectiveLieferant) {
-                        tempNotesParts.push(`Lieferant: ${effectiveLieferant}`);
-                      }
-                      if (effectiveLagerort) {
-                        tempNotesParts.push(`Lagerort: ${effectiveLagerort}`);
-                      }
-                      if (effectiveBemerkung) {
-                        tempNotesParts.push(`Bemerkung: ${effectiveBemerkung}`);
-                      }
-                      const tempNotes = tempNotesParts.length > 0 ? tempNotesParts.join(' | ') : undefined;
-                      
-                      allRuecksendungItems.push({
-                        id: `temp-${item.key}`,
-                        productId: item.productId,
-                        productName: item.name,
-                        quantity: item.quantityInput,
-                        attribut: 'Rücksendung Lieferant',
-                        orderNumber: currentReferenz || '',
-                        notes: tempNotes,
-                        createdAt: new Date(item.createdAtTimestamp || Date.now()).toISOString(),
-                        updatedAt: new Date().toISOString(),
-                      });
-                    }
-                  });
-                }
-                
-                // Sortiere nach Zeitstempel (neueste zuerst)
-                allRuecksendungItems.sort((a, b) => {
-                  const timeA = new Date(a.createdAt || a.updatedAt || 0).getTime();
-                  const timeB = new Date(b.createdAt || b.updatedAt || 0).getTime();
-                  return timeB - timeA;
-                });
-                
-                if (allRuecksendungItems.length === 0 && currentRuecksendungWarenausgaenge.length === 0) {
-                  return (
-                    <Paragraph style={styles.emptyText}>
-                      Noch keine Artikel für diese Referenz vorhanden.
-                    </Paragraph>
-                  );
-                }
-                
-                // Verwende IMMER zuerst die State-Werte, dann effektive Werte
-                const displayBemerkung = (bemerkung && bemerkung.trim()) ? bemerkung.trim() : (effectiveBemerkung || '');
-                const displayLieferant = (lieferant && lieferant.trim()) ? lieferant.trim() : (effectiveLieferant || '');
-                const displayLagerort = (lagerort && lagerort.trim()) ? lagerort.trim() : (effectiveLagerort || '');
-                
-                // Bestimme Zeitstempel (neuestes Item oder aktueller Zeitpunkt)
-                const latestTimestamp = allRuecksendungItems.length > 0
-                  ? new Date(allRuecksendungItems[0].createdAt || allRuecksendungItems[0].updatedAt || Date.now())
-                  : new Date();
-                
-                const lastChangeText = `${latestTimestamp.toLocaleDateString('de-DE', {
-                  day: '2-digit',
-                  month: '2-digit',
-                  year: 'numeric',
-                })} ${latestTimestamp.toLocaleTimeString('de-DE', {
-                  hour: '2-digit',
-                  minute: '2-digit',
-                })}`;
-
-                return (
-                  <Card style={styles.warenausgangCard}>
-                    <Card.Content>
-                      <Title style={styles.bestellungTitle}>
-                        {currentReferenz ? `Referenz: ${currentReferenz}` : 'Rücksendung Lieferant'}
-                      </Title>
-                      {displayLieferant && (
-                        <View style={styles.infoRow}>
-                          <Paragraph style={styles.label}>Lieferant:</Paragraph>
-                          <Paragraph style={styles.value}>{displayLieferant}</Paragraph>
-                        </View>
-                      )}
-                      {displayLagerort && (
-                        <View style={styles.infoRow}>
-                          <Paragraph style={styles.label}>Lagerort:</Paragraph>
-                          <Paragraph style={styles.value}>{displayLagerort}</Paragraph>
-                        </View>
-                      )}
-                      {displayBemerkung && (
-                        <View style={styles.infoRow}>
-                          <Paragraph style={styles.label}>Bemerkung:</Paragraph>
-                          <Paragraph style={styles.value}>{displayBemerkung}</Paragraph>
-                        </View>
-                      )}
-                      <View style={styles.infoRow}>
-                        <Paragraph style={styles.label}>Letzte Änderung:</Paragraph>
-                        <Paragraph style={styles.value}>{lastChangeText}</Paragraph>
-                      </View>
-                      <Divider style={{ marginVertical: 16 }} />
-                      
-                      {allRuecksendungItems.map((warenausgang, index) => (
-                        <View key={warenausgang.id || `item-${index}`} style={{ marginBottom: 12 }}>
-                          <View style={styles.infoRow}>
-                            <Paragraph style={styles.label}>Artikel:</Paragraph>
-                            <Paragraph style={styles.value}>{warenausgang.productName}</Paragraph>
-                          </View>
-                          <View style={styles.infoRow}>
-                            <Paragraph style={styles.label}>Menge:</Paragraph>
-                            <Chip mode="outlined" style={styles.chip}>
-                              {warenausgang.quantity} Stück
-                            </Chip>
-                          </View>
-                          {index < allRuecksendungItems.length - 1 && <Divider style={{ marginVertical: 8 }} />}
-                        </View>
-                      ))}
-                    </Card.Content>
-                  </Card>
-              );
-            }
-
-              // Historie für Projekt, Lager und Entsorgung
-              if (warenausgangstyp === 'Projekt' || warenausgangstyp === 'Lager' || warenausgangstyp === 'Entsorgung') {
-                const currentReferenz = (referenz || '').trim();
-                
-                // Wenn keine Referenz vorhanden ist, zeige nichts in der Historie an
-                if (!currentReferenz) {
-                  return (
-                    <Paragraph style={styles.emptyText}>
-                      Keine Referenz eingegeben. Bitte geben Sie eine Referenz ein, um die Historie anzuzeigen.
-                    </Paragraph>
-                  );
-                }
-                
-                // Filtere Warenausgänge nach aktueller Referenz und Typ
-                const filteredWarenausgaenge = warenausgaenge.filter(w => {
-                  if (w.attribut !== warenausgangstyp) return false;
-                  if (!w.notes && !w.orderNumber) return false;
-                  const referenzMatch = w.notes?.match(/Referenz:\s*(.+?)(?:\s*\||$)/);
-                  const extractedReferenz = referenzMatch ? referenzMatch[1].trim() : (w.orderNumber || '').trim();
-                  return extractedReferenz === currentReferenz;
-                });
-                
-                // Bestimme die entsprechenden Summary Items
-                let summaryItems: any[] = [];
-                let prefix = '';
-                if (warenausgangstyp === 'Projekt') {
-                  summaryItems = projektSummaryItems;
-                  prefix = 'projekt-ref-';
-                } else if (warenausgangstyp === 'Lager') {
-                  summaryItems = lagerSummaryItems;
-                  prefix = 'lager-ref-';
-                } else if (warenausgangstyp === 'Entsorgung') {
-                  summaryItems = entsorgungSummaryItems;
-                  prefix = 'entsorgung-ref-';
-                }
-                
-                // Filtere Artikel, die bereits in Summary Items sind
-                const summaryItemIds = new Set(
-                  summaryItems
-                    .filter(item => item.key.startsWith(prefix))
-                    .map(item => {
-                      const match = item.key.match(new RegExp(`${prefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(\\d+)`));
-                      return match ? parseInt(match[1]) : null;
-                    })
-                    .filter(id => id !== null)
-                );
-                
-                const filteredItems = filteredWarenausgaenge.filter(w => {
-                  if (currentReferenz && summaryItemIds.has(w.id)) {
-                    return false;
-                  }
-                  return true;
-                });
-                
-                const allItems: any[] = [...filteredItems];
-                
-                // Extrahiere Informationen aus notes
-                let extractedBemerkung = (bemerkung || '').trim();
-                let extractedLagerort = (lagerort || '').trim();
-                let extractedProjektnummer = (projektnummer || '').trim();
-                
-                for (const item of filteredWarenausgaenge) {
-                  if (item?.notes) {
-                    const notes = item.notes;
-                    const bemerkungMatch = notes.match(/Bemerkung:\s*(.+?)(?:\s*\||$)/);
-                    const lagerortMatch = notes.match(/Lagerort:\s*(.+?)(?:\s*\||$)/);
-                    const projektnummerMatch = notes.match(/Projektnummer:\s*(.+?)(?:\s*\||$)/);
-                    
-                    if (!extractedBemerkung && bemerkungMatch) {
-                      extractedBemerkung = bemerkungMatch[1].trim();
-                    }
-                    if (!extractedLagerort && lagerortMatch) {
-                      extractedLagerort = lagerortMatch[1].trim();
-                    }
-                    if (!extractedProjektnummer && projektnummerMatch) {
-                      extractedProjektnummer = projektnummerMatch[1].trim();
-                    }
-                  }
-                }
-                
-                const effectiveBemerkung = (bemerkung && bemerkung.trim()) ? bemerkung.trim() : extractedBemerkung;
-                const effectiveLagerort = (lagerort && lagerort.trim()) ? lagerort.trim() : extractedLagerort;
-                const effectiveProjektnummer = (projektnummer && projektnummer.trim()) ? projektnummer.trim() : extractedProjektnummer;
-                
-                // Füge neue Summary Items hinzu (die nicht aus DB geladen wurden)
-                if (summaryItems.length > 0) {
-                  summaryItems.forEach(item => {
-                    if (item.key.startsWith(prefix)) {
-                      return;
-                    }
-                    
-                    const product = allProducts.find(p => p.id === item.productId);
-                    if (product) {
-                      const tempNotesParts: string[] = [];
-                      if (currentReferenz) {
-                        tempNotesParts.push(`Referenz: ${currentReferenz}`);
-                      }
-                      if (effectiveLagerort) {
-                        tempNotesParts.push(`Lagerort: ${effectiveLagerort}`);
-                      }
-                      if (warenausgangstyp === 'Projekt' && effectiveProjektnummer) {
-                        tempNotesParts.push(`Projektnummer: ${effectiveProjektnummer}`);
-                      }
-                      if (effectiveBemerkung) {
-                        tempNotesParts.push(`Bemerkung: ${effectiveBemerkung}`);
-                      }
-                      const tempNotes = tempNotesParts.length > 0 ? tempNotesParts.join(' | ') : undefined;
-                      
-                      allItems.push({
-                        id: `temp-${item.key}`,
-                        productId: item.productId,
-                        productName: item.name,
-                        quantity: item.quantityInput,
-                        attribut: warenausgangstyp,
-                        orderNumber: currentReferenz || '',
-                        notes: tempNotes,
-                        createdAt: new Date(item.createdAtTimestamp || Date.now()).toISOString(),
-                        updatedAt: new Date().toISOString(),
-                      });
-                    }
-                  });
-                }
-                
-                // Sortiere nach Zeitstempel (neueste zuerst)
-                allItems.sort((a, b) => {
-                  const timeA = new Date(a.createdAt || a.updatedAt || 0).getTime();
-                  const timeB = new Date(b.createdAt || b.updatedAt || 0).getTime();
-                  return timeB - timeA;
-                });
-                
-                if (allItems.length === 0 && filteredWarenausgaenge.length === 0) {
-                  return (
-                    <Paragraph style={styles.emptyText}>
-                      Noch keine Artikel für diese Referenz vorhanden.
-                    </Paragraph>
-                  );
-                }
-                
-                const displayBemerkung = (bemerkung && bemerkung.trim()) ? bemerkung.trim() : (effectiveBemerkung || '');
-                const displayLagerort = (lagerort && lagerort.trim()) ? lagerort.trim() : (effectiveLagerort || '');
-                const displayProjektnummer = (projektnummer && projektnummer.trim()) ? projektnummer.trim() : (effectiveProjektnummer || '');
-                
-                const latestTimestamp = allItems.length > 0
-                  ? new Date(allItems[0].createdAt || allItems[0].updatedAt || Date.now())
-                  : new Date();
-                
-                const lastChangeText = `${latestTimestamp.toLocaleDateString('de-DE', {
-                  day: '2-digit',
-                  month: '2-digit',
-                  year: 'numeric',
-                })} ${latestTimestamp.toLocaleTimeString('de-DE', {
-                  hour: '2-digit',
-                  minute: '2-digit',
-                })}`;
-
-                return (
-                  <Card style={styles.warenausgangCard}>
-                    <Card.Content>
-                      <Title style={styles.bestellungTitle}>
-                        {currentReferenz ? `Referenz: ${currentReferenz}` : warenausgangstyp}
-                      </Title>
-                      {displayLagerort && (
-                        <View style={styles.infoRow}>
-                          <Paragraph style={styles.label}>Lagerort:</Paragraph>
-                          <Paragraph style={styles.value}>{displayLagerort}</Paragraph>
-                        </View>
-                      )}
-                      {warenausgangstyp === 'Projekt' && displayProjektnummer && (
-                        <View style={styles.infoRow}>
-                          <Paragraph style={styles.label}>Projektnummer:</Paragraph>
-                          <Paragraph style={styles.value}>{displayProjektnummer}</Paragraph>
-                        </View>
-                      )}
-                      {displayBemerkung && (
-                        <View style={styles.infoRow}>
-                          <Paragraph style={styles.label}>Bemerkung:</Paragraph>
-                          <Paragraph style={styles.value}>{displayBemerkung}</Paragraph>
-                        </View>
-                      )}
-                      <View style={styles.infoRow}>
-                        <Paragraph style={styles.label}>Letzte Änderung:</Paragraph>
-                        <Paragraph style={styles.value}>{lastChangeText}</Paragraph>
-                      </View>
-                      <Divider style={{ marginVertical: 16 }} />
-                      
-                      {allItems.map((warenausgang, index) => (
-                        <View key={warenausgang.id || `item-${index}`} style={{ marginBottom: 12 }}>
-                          <View style={styles.infoRow}>
-                            <Paragraph style={styles.label}>Artikel:</Paragraph>
-                            <Paragraph style={styles.value}>{warenausgang.productName}</Paragraph>
-                          </View>
-                          <View style={styles.infoRow}>
-                            <Paragraph style={styles.label}>Menge:</Paragraph>
-                            <Chip mode="outlined" style={styles.chip}>
-                              {warenausgang.quantity} Stück
-                            </Chip>
-                          </View>
-                          {index < allItems.length - 1 && <Divider style={{ marginVertical: 8 }} />}
-                        </View>
-                      ))}
-                    </Card.Content>
-                  </Card>
-                );
-              }
-
-              // Standard-Historie für andere Warenausgangstypen
-              if (warenausgaenge.length === 0) {
-                return (
-              <Paragraph style={styles.emptyText}>
-                Noch keine Warenausgänge vorhanden.
-              </Paragraph>
-                );
-              }
-
-              return (
-              <FlatList
-                data={warenausgaenge.slice(0, 5)} // Show only last 5
-                renderItem={renderWarenausgang}
-                keyExtractor={(item) => item.id.toString()}
-                scrollEnabled={false}
-              />
-              );
-            })()}
+            {/* Titel mit Warenausgangstyp - nur anzeigen wenn Artikel vorhanden */}
+            {items.length > 0 && warenausgangstyp && (
+              <View style={styles.bodyTitleContainer}>
+                <Title style={styles.bodyTitle}>
+                  {warenausgangstyp}
+                </Title>
+              </View>
+            )}
+            {/* Artikel-Liste */}
+            {renderItemForms()}
           </Card.Content>
         </Card>
-        )}
       </ScrollView>
-
 
       {/* Vollbild-Modal für Produktliste */}
       <Modal
         visible={productsModalVisible}
         transparent={false}
         animationType="slide"
-        onRequestClose={() => {
-          setProductsModalVisible(false);
-          setProductSearchQuery('');
-          setProductFilter([]);
-        }}
+        onRequestClose={() => setProductsModalVisible(false)}
       >
         <View style={styles.fullScreenModalContainer}>
           <View style={styles.fullScreenModalHeader}>
@@ -3092,50 +1689,11 @@ const WarenausgaengeScreen: React.FC = () => {
             <Paragraph style={styles.fullScreenModalSubtitle}>
               Wählen Sie einen Artikel aus:
             </Paragraph>
-            <View style={styles.productModalSearchContainer}>
-              <View style={styles.productModalSearchRow}>
-                <TextInput
-                  style={styles.productModalSearchInput}
-                  value={productSearchQuery}
-                  onChangeText={setProductSearchQuery}
-                  placeholder="Artikel suchen..."
-                  mode="outlined"
-                  left={<TextInput.Icon icon="magnify" />}
-                />
-                <IconButton
-                  icon="filter"
-                  size={24}
-                  iconColor={BRAND_DARK_BLUE}
-                  onPress={() => {
-                    if (productFilter.length === 0) {
-                      setProductFilter(['alle']);
-                    }
-                    setProductFilterMenuVisible(true);
-                  }}
-                  mode="contained-tonal"
-                  containerColor="#eef2f7"
-                  style={styles.productModalFilterButton}
-                />
-                <IconButton
-                  icon="plus"
-                  size={24}
-                  iconColor="#fff"
-                  onPress={() => {
-                    setProductsModalVisible(false);
-                    setProductSearchQuery('');
-                    // TODO: Öffne Dialog zum Erstellen eines neuen Artikels
-                  }}
-                  mode="contained"
-                  containerColor={BRAND_LIGHT_BLUE}
-                  style={styles.productModalAddButton}
-                />
-              </View>
-            </View>
           </View>
           
           <View style={styles.fullScreenModalContent}>
             <FlatList
-              data={getFilteredProducts()}
+              data={allProducts}
               renderItem={renderProduct}
               keyExtractor={(item) => item.id.toString()}
               style={styles.fullScreenProjectsList}
@@ -3146,11 +1704,7 @@ const WarenausgaengeScreen: React.FC = () => {
           <View style={styles.fullScreenModalFooter}>
             <Button
               mode="outlined"
-              onPress={() => {
-                setProductsModalVisible(false);
-                setProductSearchQuery('');
-                setProductFilter([]);
-              }}
+              onPress={() => setProductsModalVisible(false)}
               style={styles.fullScreenCancelButton}
             >
               Abbrechen
@@ -3205,14 +1759,6 @@ const WarenausgaengeScreen: React.FC = () => {
               onValueChange={(value) => {
                 setWarenausgangstyp(value);
                 setWarenausgangstypDialogVisible(false);
-                
-                // Reset fields when switching warenausgangstyp
-                if (value !== 'Rücksendung Lieferant') {
-                  setRuecksendungSummaryItems([]);
-                  setReferenz('');
-                  setBemerkung('');
-                  setLieferant('');
-                }
               }}
               value={warenausgangstyp}
             >
@@ -3298,6 +1844,63 @@ const WarenausgaengeScreen: React.FC = () => {
         </Dialog>
       </Portal>
 
+      {/* Von Lagerort Selection Dialog */}
+      <Portal>
+        <Dialog 
+          visible={vonLagerortDialogVisible} 
+          onDismiss={() => {
+            setVonLagerortDialogVisible(false);
+          }}
+        >
+          <Dialog.Title>Von Lagerort wählen</Dialog.Title>
+          <Dialog.Content>
+            <RadioButton.Group 
+              onValueChange={(value) => {
+                setVonLagerort(value);
+                setLagerort(value);
+                setVonLagerortDialogVisible(false);
+              }} 
+              value={vonLagerort || lagerort}
+            >
+              {userLocations.map((location, index) => (
+                <RadioButton.Item key={index} label={location} value={location} />
+              ))}
+            </RadioButton.Group>
+          </Dialog.Content>
+        </Dialog>
+      </Portal>
+
+      {/* Nach Lagerort Selection Dialog */}
+      <Portal>
+        <Dialog 
+          visible={nachLagerortDialogVisible} 
+          onDismiss={() => {
+            setNachLagerortDialogVisible(false);
+          }}
+        >
+          <Dialog.Title>Nach Lagerort wählen</Dialog.Title>
+          <Dialog.Content>
+            <ScrollView style={styles.dialogScrollArea}>
+              <RadioButton.Group 
+                onValueChange={(value) => {
+                  setNachLagerort(value);
+                  setNachLagerortDialogVisible(false);
+                }} 
+                value={nachLagerort}
+              >
+                {allLocations
+                  .filter(location => 
+                    location !== (vonLagerort || lagerort)
+                  )
+                .map((location, index) => (
+                  <RadioButton.Item key={index} label={location} value={location} />
+                ))}
+            </RadioButton.Group>
+            </ScrollView>
+          </Dialog.Content>
+        </Dialog>
+      </Portal>
+
       {/* Entsorgungsgrund Selection Dialog */}
       <Portal>
         <Dialog visible={auswahlGrundDialogVisible} onDismiss={() => setAuswahlGrundDialogVisible(false)}>
@@ -3312,29 +1915,6 @@ const WarenausgaengeScreen: React.FC = () => {
               ))}
             </RadioButton.Group>
           </Dialog.Content>
-          <Dialog.Actions>
-            <Button onPress={() => setAuswahlGrundDialogVisible(false)}>Schließen</Button>
-          </Dialog.Actions>
-        </Dialog>
-      </Portal>
-
-      {/* Unit Selection Dialog */}
-      <Portal>
-        <Dialog visible={unitDialogVisible} onDismiss={() => setUnitDialogVisible(false)}>
-          <Dialog.Title>Einheit wählen</Dialog.Title>
-          <Dialog.Content>
-            <RadioButton.Group onValueChange={(value) => {
-              setSelectedUnit(value);
-              setUnitDialogVisible(false);
-            }} value={selectedUnit}>
-              {getAvailableUnits().map((unit) => (
-                <RadioButton.Item key={unit} label={unit} value={unit} />
-              ))}
-            </RadioButton.Group>
-          </Dialog.Content>
-          <Dialog.Actions>
-            <Button onPress={() => setUnitDialogVisible(false)}>Schließen</Button>
-          </Dialog.Actions>
         </Dialog>
       </Portal>
 
@@ -3439,8 +2019,13 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
     marginTop: 8,
   },
-  formContainer: {
+  mainScrollView: {
     flex: 1,
+  },
+  scrollViewContent: {
+    paddingBottom: 16,
+  },
+  formContainer: {
     padding: 16,
   },
   formCard: {
@@ -3459,7 +2044,7 @@ const styles = StyleSheet.create({
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 2,
   },
   textInput: {
     flex: 1,
@@ -3467,11 +2052,14 @@ const styles = StyleSheet.create({
   },
   artikelnummerInput: {
     flex: 1,
+    minWidth: 200,
     backgroundColor: 'white',
   },
   iconButton: {
     margin: 0,
-    padding: 4,
+    padding: 2,
+    width: 36,
+    height: 36,
   },
   barcodeButton: {
     backgroundColor: BRAND_LIGHT_BLUE,
@@ -3484,63 +2072,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: 'bold',
   },
-  articleCard: {
-    marginTop: 16,
-    backgroundColor: '#f9f2ff',
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#e0e0e0',
-    elevation: 0,
-  },
-  articleCardSpacing: {
-    marginBottom: 16,
-  },
-  articleToolbar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 16,
-  },
-  articleSearchInput: {
-    flex: 1,
-    backgroundColor: 'white',
-  },
-  articleAddButton: {
-    borderRadius: 8,
-    alignSelf: 'center',
-    marginTop: 16,
-    paddingHorizontal: 16,
-  },
-  articleEmptyState: {
-    paddingVertical: 24,
-    alignItems: 'center',
-  },
-  articleEmptyText: {
-    textAlign: 'center',
-    color: '#666',
-  },
-  articleItemCard: {
-    borderWidth: 1,
-    borderColor: '#e0e0e0',
-    borderRadius: 12,
-    padding: 16,
-    backgroundColor: '#fafafa',
-    gap: 12,
-  },
-  articleItemHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  articleItemTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: BRAND_DARK_BLUE,
-  },
-  articleInfoText: {
-    color: '#666',
-    fontStyle: 'italic',
-  },
   quantityContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -3551,7 +2082,7 @@ const styles = StyleSheet.create({
     margin: 0,
   },
   quantityInput: {
-    width: 55,
+    width: 80,
     textAlign: 'center',
     marginHorizontal: 4,
     backgroundColor: 'white',
@@ -3601,15 +2132,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: 'bold',
   },
-  historyCard: {
-    elevation: 2,
-  },
-  historyTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 16,
-  },
   warenausgangCard: {
     marginBottom: 12,
     elevation: 1,
@@ -3632,11 +2154,7 @@ const styles = StyleSheet.create({
     color: BRAND_DARK_BLUE,
   },
   chip: {
-    height: 36,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 18,
-    paddingHorizontal: 12,
+    height: 28,
   },
   date: {
     marginTop: 8,
@@ -3739,28 +2257,6 @@ const styles = StyleSheet.create({
   },
   fullScreenListContent: {
     paddingBottom: 20, // Add some padding at the bottom for the footer
-  },
-  productModalSearchContainer: {
-    marginTop: 16,
-    width: '100%',
-  },
-  productModalSearchRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 8,
-  },
-  productModalSearchInput: {
-    flex: 1,
-    backgroundColor: 'white',
-  },
-  productModalFilterButton: {
-    margin: 0,
-  },
-  productModalAddButton: {
-    margin: 0,
   },
   fullScreenModalFooter: {
     backgroundColor: 'white',
@@ -4039,126 +2535,115 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     fontSize: 16,
   },
-  // Styles für Rücksendung Lieferant (wie Ohne Bestellung)
-  projectMaterialItemHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 16,
-  },
-  projectMaterialItemInfo: {
-    flex: 1,
-    marginRight: 8,
-  },
-  projectMaterialItemName: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginBottom: 4,
-    color: '#333',
-  },
-  projectMaterialItemDetails: {
-    fontSize: 14,
-    color: '#666',
-    lineHeight: 18,
-  },
-  projectMaterialActionButtons: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'flex-end',
-    gap: 4,
-  },
-  projectMaterialQuantityContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 8,
-  },
-  projectMaterialQuantityLabel: {
-    fontSize: 16,
-    fontWeight: '500',
-    color: '#333',
-  },
-  projectMaterialQuantityControls: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  projectMaterialQuantityButton: {
-    margin: 0,
-    borderRadius: 20,
-  },
-  projectMaterialQuantityInput: {
-    width: 45,
-    marginHorizontal: 4,
-    textAlign: 'center',
-  },
-  projectMaterialUnitText: {
-    fontSize: 14,
-    color: '#666',
-    marginLeft: 8,
-  },
-  projectMaterialLastBookingContainer: {
-    marginTop: 12,
-    padding: 8,
-    backgroundColor: '#f0f8ff',
-    borderRadius: 8,
-    borderLeftWidth: 4,
-    borderLeftColor: BRAND_LIGHT_BLUE,
-  },
-  projectMaterialLastBookingText: {
-    fontSize: 12,
-    color: '#666',
-    fontStyle: 'italic',
-    flex: 1,
-    marginRight: 12,
-  },
-  projectMaterialLastBookingRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  projectMaterialHistoryButton: {
-    padding: 4,
-  },
-  orderSummaryCard: {
-    marginTop: 0,
-    marginBottom: 12,
-    elevation: 0,
-    backgroundColor: '#fff',
-    borderWidth: 1,
-    borderColor: '#e0e0e0',
-    borderRadius: 8,
-  },
-  projectMaterialsListContainer: {
-    paddingBottom: 16,
-    width: '100%',
-  },
   // Sticky Bar Styles
   stickyBar: {
-    backgroundColor: 'white',
     paddingHorizontal: 16,
     paddingVertical: 12,
+    backgroundColor: '#fff',
     borderBottomWidth: 1,
     borderBottomColor: '#e0e0e0',
-    elevation: 2,
+    elevation: 3,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
+    shadowOpacity: 0.15,
     shadowRadius: 4,
+    zIndex: 1000,
   },
   stickyBarContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 12,
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
   },
   searchInput: {
     flex: 1,
-    backgroundColor: 'white',
+    backgroundColor: '#fff',
+    marginRight: 0,
+    marginBottom: 0,
   },
   stickyIconButton: {
     margin: 0,
   },
   stickyAddButton: {
-    marginLeft: 0,
+    margin: 0,
+  },
+  dialogSearchInput: {
+    marginBottom: 16,
+    backgroundColor: 'white',
+  },
+  dialogScrollArea: {
+    maxHeight: 300,
+  },
+  // Body-Bereich Styles
+  bodyCard: {
+    margin: 16,
+    marginTop: 0,
+    elevation: 2,
+  },
+  bodyTitleContainer: {
+    marginBottom: 16,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e0e0e0',
+  },
+  bodyTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: BRAND_DARK_BLUE,
+    textAlign: 'center',
+  },
+  emptyState: {
+    padding: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptyStateText: {
+    fontSize: 16,
+    color: '#666',
+    textAlign: 'center',
+    marginBottom: 16,
+  },
+  addButton: {
+    borderRadius: 8,
+  },
+  itemFormCard: {
+    marginBottom: 16,
+    elevation: 2,
+  },
+  itemHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  itemHeaderButtons: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  itemTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: BRAND_DARK_BLUE,
+    flex: 1,
+  },
+  quantityAndUnitContainer: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 24,
+  },
+  columnContainer: {
+    flex: 1,
+    flexDirection: 'column',
+    alignItems: 'flex-start',
+  },
+  menuItemText: {
+    fontSize: 16,
+    color: '#333',
   },
 });
 

@@ -335,3 +335,5 @@ erDiagram
 - **Cascade Delete:** Wenn ein Product gelöscht wird, werden alle zugehörigen Wareneingänge, Warenausgänge, OrderAssignedItems und ProjectAssignedItems gelöscht
 - **SetNull:** Wenn ein Supplier gelöscht wird, wird `SupplierId` in den zugehörigen Orders auf `null` gesetzt
 
+
+
