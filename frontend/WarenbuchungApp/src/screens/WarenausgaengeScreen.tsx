@@ -93,6 +93,7 @@ const WarenausgaengeScreen: React.FC = () => {
     anzahl: string;
     selectedProduct: any | null;
     selectedUnit: string;
+    isSaved?: boolean; // Flag to mark if item is saved
   }
   const [items, setItems] = useState<WarenausgangItem[]>([]);
   const [productSearchQuery, setProductSearchQuery] = useState('');
@@ -656,11 +657,12 @@ const WarenausgaengeScreen: React.FC = () => {
     }
 
     try {
-      // Hier kann die Logik zum Speichern des Artikels implementiert werden
-      // Z.B. API-Call oder lokale Speicherung
-      Alert.alert('Erfolg', `Artikel "${item.selectedProduct.name}" wurde gespeichert.`);
+      // Markiere das Item als gespeichert
+      const newItems = [...items];
+      newItems[itemIndex].isSaved = true;
+      setItems(newItems);
       
-      // Optional: Artikel aus der Liste entfernen nach dem Speichern
+      Alert.alert('Erfolg', `Artikel "${item.selectedProduct.name}" wurde gespeichert.`);
       // setItems((prev) => prev.filter((_, i) => i !== itemIndex));
     } catch (error) {
       console.error('Error saving item:', error);
@@ -700,8 +702,18 @@ const WarenausgaengeScreen: React.FC = () => {
                 {item.selectedProduct?.name || `Artikel ${index + 1}`}
               </Title>
               <View style={styles.itemHeaderButtons}>
-                <IconButton
-                  icon="content-save"
+                {item.isSaved ? (
+                  <Chip 
+                    mode="flat" 
+                    icon="check-circle" 
+                    style={styles.savedChip}
+                    textStyle={styles.savedChipText}
+                  >
+                    Gespeichert
+                  </Chip>
+                ) : (
+                  <IconButton
+                    icon="content-save"
                   size={24}
                   iconColor={
                     quantityValue <= 0 || !item.selectedProduct
@@ -712,6 +724,7 @@ const WarenausgaengeScreen: React.FC = () => {
                   onPress={() => handleSaveItem(index)}
                   style={styles.iconButton}
                 />
+                )}
                 <IconButton
                   icon="close"
                   size={24}
@@ -2644,6 +2657,15 @@ const styles = StyleSheet.create({
   menuItemText: {
     fontSize: 16,
     color: '#333',
+  },
+  savedChip: {
+    backgroundColor: '#e8f5e9',
+    borderColor: '#4caf50',
+    borderWidth: 1,
+  },
+  savedChipText: {
+    color: '#2e7d32',
+    fontWeight: 'bold',
   },
 });
 

@@ -1,12 +1,3 @@
-/**
- * Program.cs
- * 
- * @author Adam Mechouate
- * @company OPTIMI Solutions GmbH
- * @email adam.mechouate7@gmail.com
- * @date 2025-11-10
- */
-
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
@@ -19,11 +10,9 @@ var builder = WebApplication.CreateBuilder(args);
 // Add services to the container.
 builder.Services.AddControllers();
 
-// Configure Entity Framework with MariaDB/MySQL
-var connectionString = builder.Configuration.GetConnectionString("DefaultConnection") 
-    ?? "Server=localhost;Database=warenbuchung;User=adammechouate;Password=;Port=3306;";
+// Configure Entity Framework with SQLite
 builder.Services.AddDbContext<WarenbuchungDbContext>(options =>
-    options.UseMySql(connectionString, new MySqlServerVersion(new Version(11, 2, 3))));
+    options.UseSqlite(builder.Configuration.GetConnectionString("DefaultConnection") ?? "Data Source=warenbuchung.db"));
 
 // Configure JWT Authentication
 var jwtSettings = builder.Configuration.GetSection("Jwt");
@@ -48,20 +37,6 @@ builder.Services.AddAuthentication(options =>
         ValidAudience = jwtSettings["Audience"],
         ValidateLifetime = true,
         ClockSkew = TimeSpan.Zero
-    };
-    // Allow anonymous requests to pass through without validation errors
-    options.Events = new Microsoft.AspNetCore.Authentication.JwtBearer.JwtBearerEvents
-    {
-        OnAuthenticationFailed = context =>
-        {
-            // Don't fail if token is missing for AllowAnonymous endpoints
-            if (context.Request.Path.StartsWithSegments("/api/orders"))
-            {
-                context.NoResult();
-                return Task.CompletedTask;
-            }
-            return Task.CompletedTask;
-        }
     };
 });
 
@@ -122,15 +97,11 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI(c =>
     {
         c.SwaggerEndpoint("/swagger/v1/swagger.json", "Warenbuchung API V1");
-        c.RoutePrefix = "swagger"; // Set Swagger UI at /swagger
+        c.RoutePrefix = string.Empty; // Set Swagger UI at the app's root
     });
 }
 
-// HTTPS Redirection nur in Production aktivieren
-if (!app.Environment.IsDevelopment())
-{
-    app.UseHttpsRedirection();
-}
+app.UseHttpsRedirection();
 
 app.UseCors("AllowReactNative");
 

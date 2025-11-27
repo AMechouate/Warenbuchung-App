@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using WarenbuchungApi.Data;
 
@@ -11,9 +12,11 @@ using WarenbuchungApi.Data;
 namespace WarenbuchungApi.Migrations
 {
     [DbContext(typeof(WarenbuchungDbContext))]
-    partial class WarenbuchungDbContextModelSnapshot : ModelSnapshot
+    [Migration("20251126155815_AddProjectModel")]
+    partial class AddProjectModel
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -914,73 +917,6 @@ namespace WarenbuchungApi.Migrations
                     b.HasIndex("ProjectNumber");
 
                     b.ToTable("Projects");
-
-                    b.HasData(
-                        new
-                        {
-                            Id = 1,
-                            CreatedAt = new DateTime(2025, 1, 15, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Customer = "Bauherr München GmbH",
-                            Description = "Bürogebäude München",
-                            EndDate = new DateTime(2025, 12, 31, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Location = "München",
-                            Name = "PROJ-2025-001",
-                            ProjectNumber = "PROJ-2025-001",
-                            StartDate = new DateTime(2025, 1, 15, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Status = "Aktiv"
-                        },
-                        new
-                        {
-                            Id = 2,
-                            CreatedAt = new DateTime(2025, 3, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Customer = "Wohnbau Berlin AG",
-                            Description = "Wohnkomplex Berlin",
-                            EndDate = new DateTime(2025, 6, 30, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Location = "Berlin",
-                            Name = "PROJ-2025-002",
-                            ProjectNumber = "PROJ-2025-002",
-                            StartDate = new DateTime(2025, 3, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Status = "Aktiv"
-                        },
-                        new
-                        {
-                            Id = 3,
-                            CreatedAt = new DateTime(2025, 2, 10, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Customer = "Industriebau Hamburg GmbH",
-                            Description = "Industriehalle Hamburg",
-                            EndDate = new DateTime(2025, 11, 15, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Location = "Hamburg",
-                            Name = "PROJ-2025-003",
-                            ProjectNumber = "PROJ-2025-003",
-                            StartDate = new DateTime(2025, 2, 10, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Status = "Pausiert"
-                        },
-                        new
-                        {
-                            Id = 4,
-                            CreatedAt = new DateTime(2025, 4, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Customer = "Stadt Köln",
-                            Description = "Schule Köln",
-                            EndDate = new DateTime(2026, 3, 31, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Location = "Köln",
-                            Name = "PROJ-2025-004",
-                            ProjectNumber = "PROJ-2025-004",
-                            StartDate = new DateTime(2025, 4, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Status = "Aktiv"
-                        },
-                        new
-                        {
-                            Id = 5,
-                            CreatedAt = new DateTime(2023, 11, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Customer = "Krankenhaus Frankfurt GmbH",
-                            Description = "Krankenhaus Frankfurt",
-                            EndDate = new DateTime(2025, 10, 31, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Location = "Frankfurt",
-                            Name = "PROJ-2025-005",
-                            ProjectNumber = "PROJ-2025-005",
-                            StartDate = new DateTime(2023, 11, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Status = "Abgeschlossen"
-                        });
                 });
 
             modelBuilder.Entity("WarenbuchungApi.Models.ProjectAssignedItem", b =>
@@ -1035,7 +971,6 @@ namespace WarenbuchungApi.Migrations
                             CreatedAt = new DateTime(2025, 1, 20, 0, 0, 0, 0, DateTimeKind.Utc),
                             DefaultQuantity = 0m,
                             ProductId = 21,
-                            ProjectId = 1,
                             ProjectKey = "PROJ-2025-001",
                             Unit = "Paket"
                         },
@@ -1045,7 +980,6 @@ namespace WarenbuchungApi.Migrations
                             CreatedAt = new DateTime(2025, 1, 20, 0, 10, 0, 0, DateTimeKind.Utc),
                             DefaultQuantity = 0m,
                             ProductId = 1,
-                            ProjectId = 1,
                             ProjectKey = "PROJ-2025-001",
                             Unit = "Sack"
                         },
@@ -1055,7 +989,6 @@ namespace WarenbuchungApi.Migrations
                             CreatedAt = new DateTime(2025, 1, 18, 0, 0, 0, 0, DateTimeKind.Utc),
                             DefaultQuantity = 0m,
                             ProductId = 23,
-                            ProjectId = 2,
                             ProjectKey = "PROJ-2025-002",
                             Unit = "Set"
                         },
@@ -1065,7 +998,6 @@ namespace WarenbuchungApi.Migrations
                             CreatedAt = new DateTime(2025, 1, 20, 0, 20, 0, 0, DateTimeKind.Utc),
                             DefaultQuantity = 0m,
                             ProductId = 10,
-                            ProjectId = 1,
                             ProjectKey = "PROJ-2025-001",
                             Unit = "Paket"
                         },
@@ -1075,7 +1007,6 @@ namespace WarenbuchungApi.Migrations
                             CreatedAt = new DateTime(2025, 1, 18, 0, 10, 0, 0, DateTimeKind.Utc),
                             DefaultQuantity = 0m,
                             ProductId = 7,
-                            ProjectId = 2,
                             ProjectKey = "PROJ-2025-002",
                             Unit = "Sack"
                         },
@@ -1085,7 +1016,6 @@ namespace WarenbuchungApi.Migrations
                             CreatedAt = new DateTime(2025, 1, 18, 0, 20, 0, 0, DateTimeKind.Utc),
                             DefaultQuantity = 0m,
                             ProductId = 22,
-                            ProjectId = 2,
                             ProjectKey = "PROJ-2025-002",
                             Unit = "Paket"
                         },
@@ -1095,7 +1025,6 @@ namespace WarenbuchungApi.Migrations
                             CreatedAt = new DateTime(2025, 1, 16, 0, 0, 0, 0, DateTimeKind.Utc),
                             DefaultQuantity = 0m,
                             ProductId = 5,
-                            ProjectId = 3,
                             ProjectKey = "PROJ-2025-003",
                             Unit = "Platte"
                         },
@@ -1105,7 +1034,6 @@ namespace WarenbuchungApi.Migrations
                             CreatedAt = new DateTime(2025, 1, 16, 0, 10, 0, 0, DateTimeKind.Utc),
                             DefaultQuantity = 0m,
                             ProductId = 12,
-                            ProjectId = 3,
                             ProjectKey = "PROJ-2025-003",
                             Unit = "Platte"
                         },
@@ -1115,7 +1043,6 @@ namespace WarenbuchungApi.Migrations
                             CreatedAt = new DateTime(2025, 1, 16, 0, 20, 0, 0, DateTimeKind.Utc),
                             DefaultQuantity = 0m,
                             ProductId = 18,
-                            ProjectId = 3,
                             ProjectKey = "PROJ-2025-003",
                             Unit = "Set"
                         },
@@ -1125,7 +1052,6 @@ namespace WarenbuchungApi.Migrations
                             CreatedAt = new DateTime(2025, 1, 14, 0, 0, 0, 0, DateTimeKind.Utc),
                             DefaultQuantity = 0m,
                             ProductId = 6,
-                            ProjectId = 4,
                             ProjectKey = "PROJ-2025-004",
                             Unit = "Rolle"
                         },
@@ -1135,7 +1061,6 @@ namespace WarenbuchungApi.Migrations
                             CreatedAt = new DateTime(2025, 1, 14, 0, 10, 0, 0, DateTimeKind.Utc),
                             DefaultQuantity = 0m,
                             ProductId = 15,
-                            ProjectId = 4,
                             ProjectKey = "PROJ-2025-004",
                             Unit = "Rolle"
                         },
@@ -1145,7 +1070,6 @@ namespace WarenbuchungApi.Migrations
                             CreatedAt = new DateTime(2025, 1, 14, 0, 20, 0, 0, DateTimeKind.Utc),
                             DefaultQuantity = 0m,
                             ProductId = 24,
-                            ProjectId = 4,
                             ProjectKey = "PROJ-2025-004",
                             Unit = "Trommel"
                         },
@@ -1155,7 +1079,6 @@ namespace WarenbuchungApi.Migrations
                             CreatedAt = new DateTime(2025, 1, 12, 0, 0, 0, 0, DateTimeKind.Utc),
                             DefaultQuantity = 0m,
                             ProductId = 2,
-                            ProjectId = 5,
                             ProjectKey = "PROJ-2025-005",
                             Unit = "Sack"
                         },
@@ -1165,7 +1088,6 @@ namespace WarenbuchungApi.Migrations
                             CreatedAt = new DateTime(2025, 1, 12, 0, 10, 0, 0, DateTimeKind.Utc),
                             DefaultQuantity = 0m,
                             ProductId = 9,
-                            ProjectId = 5,
                             ProjectKey = "PROJ-2025-005",
                             Unit = "Stange"
                         },
@@ -1175,7 +1097,6 @@ namespace WarenbuchungApi.Migrations
                             CreatedAt = new DateTime(2025, 1, 12, 0, 20, 0, 0, DateTimeKind.Utc),
                             DefaultQuantity = 0m,
                             ProductId = 20,
-                            ProjectId = 5,
                             ProjectKey = "PROJ-2025-005",
                             Unit = "Eimer"
                         });

@@ -30,7 +30,6 @@ import {
   RadioButton,
   Portal,
   Dialog,
-  Menu,
 } from 'react-native-paper';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -54,14 +53,8 @@ const WarenausgaengeScreen: React.FC = () => {
   const [lagerort, setLagerort] = useState('');
   const [userLagerort, setUserLagerort] = useState<string>('');
   const [userLocations, setUserLocations] = useState<string[]>([]);
-  const [allLocations, setAllLocations] = useState<string[]>([]);
-  const [vonLagerort, setVonLagerort] = useState('');
-  const [nachLagerort, setNachLagerort] = useState('');
   const [lagerortDialogVisible, setLagerortDialogVisible] = useState(false);
-  const [vonLagerortDialogVisible, setVonLagerortDialogVisible] = useState(false);
-  const [nachLagerortDialogVisible, setNachLagerortDialogVisible] = useState(false);
-  const [nachLagerortSearchQuery, setNachLagerortSearchQuery] = useState('');
-  const [warenausgangstyp, setWarenausgangstyp] = useState('Projekt');
+  const [warenausgangstyp, setWarenausgangstyp] = useState('Rücksendung Lieferant');
   const [referenz, setReferenz] = useState('');
   const [ordersModalVisible, setOrdersModalVisible] = useState(false);
   const [orders, setOrders] = useState<any[]>([]);
@@ -80,24 +73,9 @@ const WarenausgaengeScreen: React.FC = () => {
   const [begruendungDialogVisible, setBegruendungDialogVisible] = useState(false);
   const [showBegruendungField, setShowBegruendungField] = useState(false);
   const [auswahlGrundDialogVisible, setAuswahlGrundDialogVisible] = useState(false);
-  const [unitMenuVisible, setUnitMenuVisible] = useState(false);
+  const [unitDialogVisible, setUnitDialogVisible] = useState(false);
   const [scannerVisible, setScannerVisible] = useState(false);
   const [hasPermission, setHasPermission] = useState(false);
-  const [lieferant, setLieferant] = useState('');
-  const [bemerkung, setBemerkung] = useState('');
-
-  // Form states - Bodybereich (Artikel-Liste)
-  interface WarenausgangItem {
-    id: string;
-    artikelnummer: string;
-    anzahl: string;
-    selectedProduct: any | null;
-    selectedUnit: string;
-  }
-  const [items, setItems] = useState<WarenausgangItem[]>([]);
-  const [productSearchQuery, setProductSearchQuery] = useState('');
-  const [productFilter, setProductFilter] = useState<string[]>(['alle']);
-  const [currentItemIndexForProductSelection, setCurrentItemIndexForProductSelection] = useState<number | null>(null);
 
   // Available reasons
   const [gruende, setGruende] = useState<string[]>(['Kommission', 'Auftrag', 'Umbuchung', 'Beschädigung']);
@@ -113,7 +91,7 @@ const WarenausgaengeScreen: React.FC = () => {
   ]);
   
   // Available attributes
-  const warenausgangstypen = ['Projekt', 'Rücksendung Lieferant', 'Lager', 'Entsorgung'];
+  const warenausgangstypen = ['Rücksendung Lieferant', 'Projekt', 'Lager', 'Entsorgung'];
 
   // Mock-Projekte für die Auswahl
   const mockProjects = [
@@ -219,63 +197,14 @@ const WarenausgaengeScreen: React.FC = () => {
     }
   };
 
-  const loadAllLocations = async () => {
-    try {
-      const isAuthenticated = await apiService.isAuthenticated();
-      if (isAuthenticated) {
-        // Load all users to get all locations
-        const users = await apiService.getUsers();
-        const locationsSet = new Set<string>();
-        
-        users.forEach((user: any) => {
-          if (user.locations) {
-            // Handle both array and string formats
-            if (Array.isArray(user.locations)) {
-              user.locations.forEach((loc: string) => {
-                if (loc && loc.trim()) {
-                  locationsSet.add(loc.trim());
-                }
-              });
-            } else if (typeof user.locations === 'string') {
-              // Split comma-separated locations
-              user.locations.split(',').forEach((loc: string) => {
-                if (loc && loc.trim()) {
-                  locationsSet.add(loc.trim());
-                }
-              });
-            }
-          }
-        });
-        
-        const allLocs = Array.from(locationsSet).sort();
-        setAllLocations(allLocs);
-      } else {
-        // Fallback: use user locations
-        setAllLocations(userLocations);
-      }
-    } catch (error) {
-      // Fallback: use user locations
-      setAllLocations(userLocations);
-    }
-  };
-
   useFocusEffect(
     useCallback(() => {
       loadWarenausgaenge();
       loadUserLagerort(); // Lagerort des Benutzers laden
-      loadAllLocations(); // Alle Lagerorte für "Nach Lagerort" laden
       loadReasons(); // Ausgangsgründe laden
-      loadJustifications(); // Rücklieferungsgründe laden
+    loadJustifications(); // Rücklieferungsgründe laden
     }, [])
   );
-
-  // Reset Body-Bereich wenn Warenausgangstyp geändert wird
-  useEffect(() => {
-    // Leere die Artikel-Liste wenn sich der Warenausgangstyp ändert
-    setItems([]);
-    setProductSearchQuery('');
-    setCurrentItemIndexForProductSelection(null);
-  }, [warenausgangstyp]);
 
   const loadAllProducts = async () => {
     try {
@@ -289,21 +218,9 @@ const WarenausgaengeScreen: React.FC = () => {
   };
 
   const selectProduct = (product: any) => {
-    // If we're selecting for a specific item in the list
-    if (currentItemIndexForProductSelection !== null) {
-      const newItems = [...items];
-      newItems[currentItemIndexForProductSelection].selectedProduct = product;
-      newItems[currentItemIndexForProductSelection].artikelnummer = product.sku || '';
-      newItems[currentItemIndexForProductSelection].selectedUnit = product.unit || 'Stück';
-      setItems(newItems);
-      setCurrentItemIndexForProductSelection(null);
-    } else {
-      // Legacy: single product selection
-      setSelectedProduct(product);
-      setArtikelnummer(product.sku);
-      setSelectedUnit(product.unit || 'Stück');
-    }
-    
+    setSelectedProduct(product);
+    setArtikelnummer(product.sku);
+    setSelectedUnit(product.unit || 'Stück');
     setProductsModalVisible(false);
     
     // Reset justification field when selecting new product
@@ -542,39 +459,20 @@ const WarenausgaengeScreen: React.FC = () => {
   };
 
   const handleBarCodeScanned = ({ data }: { data: string }) => {
-    // If we're scanning for a specific item in the list
-    if (currentItemIndexForProductSelection !== null) {
-      const newItems = [...items];
-      newItems[currentItemIndexForProductSelection].artikelnummer = data;
-      setItems(newItems);
-      searchProductBySKU(data, currentItemIndexForProductSelection);
-    } else {
-      // Legacy: single product selection
-      setArtikelnummer(data);
-      searchProductBySKU(data);
-    }
+    setArtikelnummer(data);
     setScannerVisible(false);
+    // Try to find and select the product
+    searchProductBySKU(data);
   };
 
-  const searchProductBySKU = async (sku: string, itemIndex?: number) => {
+  const searchProductBySKU = async (sku: string) => {
     try {
       const products = await apiService.getProducts();
       const product = products.find(p => p.sku === sku.trim());
       
       if (product) {
-        if (itemIndex !== undefined) {
-          // Update item in list
-          const newItems = [...items];
-          newItems[itemIndex].selectedProduct = product;
-          newItems[itemIndex].artikelnummer = product.sku || '';
-          newItems[itemIndex].selectedUnit = product.unit || 'Stück';
-          setItems(newItems);
-          setCurrentItemIndexForProductSelection(null);
-        } else {
-          // Legacy: single product selection
-          setSelectedProduct(product);
-          setSelectedUnit(product.unit || 'Stück');
-        }
+        setSelectedProduct(product);
+        setSelectedUnit(product.unit || 'Stück');
       } else {
         Alert.alert('Produkt nicht gefunden', `Kein Produkt mit SKU "${sku}" gefunden.`);
       }
@@ -593,7 +491,16 @@ const WarenausgaengeScreen: React.FC = () => {
     setAuswahlGrundDialogVisible(false);
   };
 
-  // selectUnit wird jetzt direkt im Menu.Item onPress aufgerufen
+  const openUnitDialog = () => {
+    if (selectedProduct) {
+      setUnitDialogVisible(true);
+    }
+  };
+
+  const selectUnit = (unit: string) => {
+    setSelectedUnit(unit);
+    setUnitDialogVisible(false);
+  };
 
 
   // Get current project status when "Projekt" is selected
@@ -623,291 +530,6 @@ const WarenausgaengeScreen: React.FC = () => {
     }
     
     return units;
-  };
-
-  // Add new item to the list
-  const addNewItem = useCallback(() => {
-    const newItem: WarenausgangItem = {
-      id: `item-${Date.now()}-${Math.random()}`,
-      artikelnummer: '',
-      anzahl: '1',
-      selectedProduct: null,
-      selectedUnit: 'Stück',
-    };
-    setItems((prev) => [...prev, newItem]);
-  }, []);
-
-  // Save item function
-  const handleSaveItem = async (itemIndex: number) => {
-    const item = items[itemIndex];
-    if (!item) {
-      return;
-    }
-
-    if (!item.selectedProduct) {
-      Alert.alert('Hinweis', `Bitte wählen Sie zuerst einen Artikel für Position ${itemIndex + 1} aus.`);
-      return;
-    }
-
-    const quantityValue = parseFloat(item.anzahl.replace(',', '.')) || 0;
-    if (quantityValue <= 0) {
-      Alert.alert('Hinweis', `Bitte geben Sie eine gültige Anzahl für Position ${itemIndex + 1} ein.`);
-      return;
-    }
-
-    try {
-      // Hier kann die Logik zum Speichern des Artikels implementiert werden
-      // Z.B. API-Call oder lokale Speicherung
-      Alert.alert('Erfolg', `Artikel "${item.selectedProduct.name}" wurde gespeichert.`);
-      
-      // Optional: Artikel aus der Liste entfernen nach dem Speichern
-      // setItems((prev) => prev.filter((_, i) => i !== itemIndex));
-    } catch (error) {
-      console.error('Error saving item:', error);
-      Alert.alert('Fehler', 'Artikel konnte nicht gespeichert werden.');
-    }
-  };
-
-  // Render item forms
-  const renderItemForms = () => {
-    if (items.length === 0) {
-      return (
-        <View style={styles.emptyState}>
-          <Paragraph style={styles.emptyStateText}>
-            Keine Artikel hinzugefügt. Klicken Sie auf '+ Artikel hinzufügen' um zu beginnen.
-          </Paragraph>
-          <Button
-            mode="contained"
-            icon="plus"
-            onPress={addNewItem}
-            style={[styles.addButton, { marginTop: 16 }]}
-            buttonColor={BRAND_LIGHT_BLUE}
-          >
-            Artikel hinzufügen
-          </Button>
-        </View>
-      );
-    }
-
-    return items.map((item, index) => {
-      const quantityValue = parseFloat(item.anzahl.replace(',', '.')) || 0;
-
-      return (
-        <Card key={item.id} style={styles.itemFormCard}>
-          <Card.Content>
-            <View style={styles.itemHeader}>
-              <Title style={styles.itemTitle}>
-                {item.selectedProduct?.name || `Artikel ${index + 1}`}
-              </Title>
-              <View style={styles.itemHeaderButtons}>
-                <IconButton
-                  icon="content-save"
-                  size={24}
-                  iconColor={
-                    quantityValue <= 0 || !item.selectedProduct
-                      ? '#9e9e9e'
-                      : BRAND_DARK_BLUE
-                  }
-                  disabled={quantityValue <= 0 || !item.selectedProduct}
-                  onPress={() => handleSaveItem(index)}
-                  style={styles.iconButton}
-                />
-                <IconButton
-                  icon="close"
-                  size={24}
-                  iconColor="#d32f2f"
-                  onPress={() => {
-                    Alert.alert(
-                      'Artikel löschen',
-                      `Möchten Sie wirklich "${item.selectedProduct?.name || `Artikel ${index + 1}`}" löschen?`,
-                      [
-                        { text: 'Abbrechen', style: 'cancel' },
-                        {
-                          text: 'Löschen',
-                          style: 'destructive',
-                          onPress: () => {
-                            setItems((prev) => prev.filter((_, i) => i !== index));
-                          },
-                        },
-                      ]
-                    );
-                  }}
-                  style={styles.iconButton}
-                />
-              </View>
-            </View>
-
-            {/* Artikelnummer */}
-            <View style={styles.formField}>
-              <Paragraph style={styles.fieldLabel}>Artikelnummer:</Paragraph>
-              <View style={styles.inputContainer}>
-                <TextInput
-                  style={styles.artikelnummerInput}
-                  value={item.artikelnummer}
-                  onChangeText={(text) => {
-                    const newItems = [...items];
-                    newItems[index].artikelnummer = text;
-                    setItems(newItems);
-                  }}
-                  placeholder="z.B. DELL-XPS13-001"
-                  mode="outlined"
-                  dense
-                  autoCapitalize="characters"
-                />
-                <IconButton
-                  icon="magnify"
-                  size={20}
-                  iconColor={BRAND_DARK_BLUE}
-                  onPress={async () => {
-                    try {
-                      if (allProducts.length === 0) {
-                        await loadAllProducts();
-                      }
-                      setCurrentItemIndexForProductSelection(index);
-                      setProductsModalVisible(true);
-                    } catch (error) {
-                      console.error('Error loading products:', error);
-                    }
-                  }}
-                  style={styles.iconButton}
-                />
-                <IconButton
-                  icon="barcode-scan"
-                  size={20}
-                  iconColor={BRAND_DARK_BLUE}
-                  onPress={async () => {
-                    setCurrentItemIndexForProductSelection(index);
-                    await openScanner();
-                  }}
-                  style={styles.iconButton}
-                />
-              </View>
-            </View>
-
-            {/* Anzahl und Einheit - nebeneinander */}
-            <View style={styles.formField}>
-              <View style={styles.quantityAndUnitContainer}>
-                {/* Anzahl Spalte */}
-                <View style={styles.columnContainer}>
-                  <Paragraph style={styles.fieldLabel}>Menge:</Paragraph>
-                  <View style={styles.quantityContainer}>
-                    <IconButton
-                      icon="minus"
-                      mode="contained"
-                      size={20}
-                      onPress={() => {
-                        const newItems = [...items];
-                        const current = parseFloat(newItems[index].anzahl.replace(',', '.')) || 0;
-                        const newValue = Math.max(1, current - 1);
-                        newItems[index].anzahl = Math.round(newValue).toString();
-                        setItems(newItems);
-                      }}
-                      style={styles.quantityButton}
-                      iconColor="white"
-                    />
-                    <TextInput
-                      style={styles.quantityInput}
-                      value={item.anzahl}
-                      onChangeText={(text) => {
-                        const newItems = [...items];
-                        const numericValue = parseFloat(text.replace(',', '.')) || 0;
-                        const clampedValue = Math.max(1, numericValue);
-                        newItems[index].anzahl = Math.round(clampedValue).toString();
-                        setItems(newItems);
-                      }}
-                      mode="outlined"
-                      dense
-                      keyboardType="numeric"
-                    />
-                    <IconButton
-                      icon="plus"
-                      mode="contained"
-                      size={20}
-                      onPress={() => {
-                        const newItems = [...items];
-                        const current = parseFloat(newItems[index].anzahl.replace(',', '.')) || 0;
-                        const newValue = current + 1;
-                        newItems[index].anzahl = Math.round(newValue).toString();
-                        setItems(newItems);
-                      }}
-                      style={styles.quantityButton}
-                      iconColor="white"
-                    />
-                  </View>
-                </View>
-
-                {/* Einheit Spalte - nur anzeigen wenn Produkt ausgewählt */}
-                {item.selectedProduct && (
-                  <View style={styles.columnContainer}>
-                    <Paragraph style={styles.fieldLabel}>Einheit:</Paragraph>
-                    <Menu
-                      visible={unitMenuVisible && currentItemIndexForProductSelection === index}
-                      onDismiss={() => {
-                        setUnitMenuVisible(false);
-                        // Reset after a small delay to ensure menu can reopen
-                        setTimeout(() => {
-                          if (currentItemIndexForProductSelection === index) {
-                            setCurrentItemIndexForProductSelection(null);
-                          }
-                        }, 100);
-                      }}
-                      anchor={
-                        <TouchableOpacity
-                          style={styles.unitDropdownButton}
-                          onPress={() => {
-                            // If menu is already open for this item, close it first
-                            if (unitMenuVisible && currentItemIndexForProductSelection === index) {
-                              setUnitMenuVisible(false);
-                              setCurrentItemIndexForProductSelection(null);
-                            } else {
-                              // Set index first, then open menu
-                              setCurrentItemIndexForProductSelection(index);
-                              setTimeout(() => {
-                                setUnitMenuVisible(true);
-                              }, 50);
-                            }
-                          }}
-                        >
-                          <Paragraph style={styles.unitDropdownText}>
-                            {item.selectedUnit || item.selectedProduct?.unit || 'Stück'}
-                          </Paragraph>
-                          <MaterialCommunityIcons 
-                            name="chevron-down" 
-                            size={20} 
-                            color={BRAND_DARK_BLUE} 
-                          />
-                        </TouchableOpacity>
-                      }
-                    >
-                      {(() => {
-                        const units = ['Stück', 'Palette', 'Paket'];
-                        if (item.selectedProduct?.unit && !units.includes(item.selectedProduct.unit)) {
-                          units.push(item.selectedProduct.unit);
-                        }
-                        return units.map((unit) => (
-                          <Menu.Item
-                            key={unit}
-                            onPress={() => {
-                              const newItems = [...items];
-                              newItems[index].selectedUnit = unit;
-                              setItems(newItems);
-                              setUnitMenuVisible(false);
-                              setCurrentItemIndexForProductSelection(null);
-                            }}
-                            title={unit}
-                            titleStyle={styles.menuItemText}
-                          />
-                        ));
-                      })()}
-                    </Menu>
-                  </View>
-                )}
-              </View>
-            </View>
-          </Card.Content>
-        </Card>
-      );
-    });
   };
 
   const handleSubmit = async () => {
@@ -1240,51 +862,7 @@ const WarenausgaengeScreen: React.FC = () => {
         )}
       </Surface>
 
-      {/* Sticky Search/Filter/Add Bar - immer sichtbar wenn Artikel vorhanden */}
-      {items.length > 0 && (
-        <View style={styles.stickyBar}>
-          <View style={styles.stickyBarContainer}>
-            <TextInput
-              style={styles.searchInput}
-              value={productSearchQuery}
-              onChangeText={setProductSearchQuery}
-              placeholder="Artikel suchen..."
-              mode="outlined"
-              dense
-              left={<TextInput.Icon icon="magnify" />}
-            />
-            <IconButton
-              icon="filter"
-              size={24}
-              iconColor={BRAND_DARK_BLUE}
-              onPress={() => {
-                // Filter functionality can be added here
-              }}
-              mode="contained-tonal"
-              containerColor="#eef2f7"
-              style={styles.stickyIconButton}
-            />
-            <IconButton
-              icon="plus"
-              size={24}
-              iconColor="#fff"
-              onPress={addNewItem}
-              mode="contained"
-              containerColor={BRAND_LIGHT_BLUE}
-              style={[styles.stickyIconButton, styles.stickyAddButton]}
-            />
-          </View>
-        </View>
-      )}
-
-      {/* Gesamter Inhalt scrollbar - Kopfbereich + Body-Bereich */}
-      <ScrollView 
-        style={styles.mainScrollView}
-        showsVerticalScrollIndicator={true}
-        contentContainerStyle={styles.scrollViewContent}
-      >
-        {/* Kopfbereich - vollständig sichtbar, nicht scrollbar */}
-        <View style={styles.formContainer}>
+      <ScrollView style={styles.formContainer} showsVerticalScrollIndicator={false}>
         {/* Formular */}
         <Card style={styles.formCard}>
           <Card.Content>
@@ -1311,7 +889,29 @@ const WarenausgaengeScreen: React.FC = () => {
               </TouchableOpacity>
             </View>
 
-            {/* Projektnummer - nur bei Projekt */}
+            {/* Referenz */}
+            <View style={styles.formField}>
+              <Paragraph style={styles.fieldLabel}>Referenz:</Paragraph>
+              <View style={styles.inputContainer}>
+                <TextInput
+                  style={[styles.textInput, { flex: 1 }]}
+                  value={referenz}
+                  onChangeText={setReferenz}
+                  placeholder="z.B. WA-2025-001"
+                  mode="outlined"
+                  dense
+                />
+                <IconButton
+                  icon="magnify"
+                  size={24}
+                  iconColor={BRAND_DARK_BLUE}
+                  onPress={handleReferenzSearch}
+                  style={styles.iconButton}
+                />
+              </View>
+            </View>
+
+            {/* Projekt-Auswahl - nur bei Projekt */}
             {warenausgangstyp === 'Projekt' && (
               <View style={styles.formField}>
                 <Paragraph style={styles.fieldLabel}>Projektnummer:</Paragraph>
@@ -1328,300 +928,172 @@ const WarenausgaengeScreen: React.FC = () => {
                     keyboardType="default"
                     returnKeyType="done"
                   />
-                  <IconButton
+                  <Button
+                    mode="contained"
                     icon="magnify"
-                    size={20}
-                    iconColor={BRAND_DARK_BLUE}
                     onPress={openProjectSearch}
-                    style={styles.iconButton}
-                  />
+                    style={styles.barcodeButton}
+                    labelStyle={styles.barcodeButtonLabel}
+                  >
+                    Projekt suchen
+                  </Button>
                 </View>
               </View>
             )}
 
-            {/* Referenz */}
-            <View style={styles.formField}>
-              <Paragraph style={styles.fieldLabel}>Referenz:</Paragraph>
-              <View style={styles.inputContainer}>
-                <TextInput
-                  style={[styles.textInput, { flex: 1 }]}
-                  value={referenz}
-                  onChangeText={setReferenz}
-                  placeholder="z.B. WA-2025-001"
-                  mode="outlined"
-                  dense
-                />
-                {warenausgangstyp !== 'Projekt' && warenausgangstyp !== 'Rücksendung Lieferant' && warenausgangstyp !== 'Lager' && warenausgangstyp !== 'Entsorgung' && (
+            {/* Artikelnummer - nicht bei Projekt */}
+            {warenausgangstyp !== 'Projekt' && (
+              <View style={styles.formField}>
+                <Paragraph style={styles.fieldLabel}>Artikelnummer:</Paragraph>
+                <View style={styles.inputContainer}>
+                  <TextInput
+                    style={styles.artikelnummerInput}
+                    value={artikelnummer}
+                    onChangeText={(text) => {
+                      setArtikelnummer(text);
+                      setSelectedProduct(null); // Clear selected product when manually typing
+                    }}
+                    placeholder="z.B. DELL-XPS13-001"
+                    mode="outlined"
+                    dense
+                    autoCapitalize="characters"
+                    autoCorrect={false}
+                    keyboardType="default"
+                    returnKeyType="done"
+                  />
                   <IconButton
                     icon="magnify"
                     size={24}
                     iconColor={BRAND_DARK_BLUE}
-                    onPress={handleReferenzSearch}
+                    onPress={loadAllProducts}
                     style={styles.iconButton}
-                  />
-                )}
-              </View>
-            </View>
-
-            {/* Lieferant - bei Projekt, Rücksendung Lieferant und Entsorgung */}
-            {(warenausgangstyp === 'Projekt' || warenausgangstyp === 'Rücksendung Lieferant' || warenausgangstyp === 'Entsorgung') && (
-              <View style={styles.formField}>
-                <Paragraph style={styles.fieldLabel}>Lieferant:</Paragraph>
-                <View style={styles.inputContainer}>
-                  <TextInput
-                    style={[styles.textInput, { flex: 1 }]}
-                    value={lieferant}
-                    onChangeText={setLieferant}
-                    placeholder="Lieferant suchen..."
-                    mode="outlined"
-                    dense
                   />
                   <IconButton
-                    icon="magnify"
-                    size={20}
+                    icon="barcode-scan"
+                    size={24}
                     iconColor={BRAND_DARK_BLUE}
-                    onPress={() => {
-                      // Lieferant-Suche kann hier implementiert werden
-                    }}
+                    onPress={openScanner}
                     style={styles.iconButton}
                   />
                 </View>
               </View>
             )}
 
-
-            {/* Anzahl und Einheit - bei keinem Warenausgangstyp mehr im Kopfbereich */}
-            {false && (
-              <View style={styles.formField}>
-                <View style={styles.quantityAndUnitRow}>
-                  <View style={styles.quantitySection}>
-                    <Paragraph style={styles.fieldLabel}>Anzahl:</Paragraph>
-                    <View style={styles.quantityContainer}>
-                      <IconButton
-                        icon="minus"
-                        mode="contained"
-                        size={20}
-                        onPress={decrementAnzahl}
-                        style={styles.quantityButton}
-                        iconColor="white"
-                      />
-                      <TextInput
-                        style={styles.quantityInput}
-                        value={anzahl.toString()}
-                        onChangeText={handleAnzahlTextChange}
-                        mode="outlined"
-                        dense
-                        keyboardType="numeric"
-                        selectTextOnFocus
-                      />
-                      <IconButton
-                        icon="plus"
-                        mode="contained"
-                        size={20}
-                        onPress={incrementAnzahl}
-                        style={styles.quantityButton}
-                        iconColor="white"
-                      />
-                    </View>
-                    
-                    {/* Lagerbestands-Anzeige */}
-                    {selectedProduct && (
-                      <View style={styles.stockInfoContainer}>
-                        <Paragraph style={[
-                          styles.stockInfoText,
-                          anzahl > selectedProduct.stockQuantity && styles.stockExceededText
-                        ]}>
-                          Verfügbar: {selectedProduct.stockQuantity} Stück
-                          {anzahl > selectedProduct.stockQuantity && ' ⚠️ Überschritten!'}
-                        </Paragraph>
-                      </View>
-                    )}
-                  </View>
-                  
-                  {selectedProduct && (
-                    <View style={styles.unitSection}>
-                      <Paragraph style={styles.fieldLabel}>Einheit:</Paragraph>
-                      <Menu
-                        visible={unitMenuVisible && currentItemIndexForProductSelection === null}
-                        onDismiss={() => {
-                          setUnitMenuVisible(false);
-                          setCurrentItemIndexForProductSelection(null);
-                        }}
-                        anchor={
-                          <TouchableOpacity
-                            style={styles.unitDropdownButton}
-                            onPress={() => {
-                              if (unitMenuVisible && currentItemIndexForProductSelection === null) {
-                                setUnitMenuVisible(false);
-                                setCurrentItemIndexForProductSelection(null);
-                              } else {
-                                setCurrentItemIndexForProductSelection(null);
-                                setTimeout(() => {
-                                  setUnitMenuVisible(true);
-                                }, 50);
-                              }
-                            }}
-                          >
-                            <Paragraph style={styles.unitDropdownText}>
-                              {selectedUnit || selectedProduct?.unit || 'Stück'}
-                            </Paragraph>
-                            <MaterialCommunityIcons 
-                              name="chevron-down" 
-                              size={20} 
-                              color={BRAND_DARK_BLUE} 
-                            />
-                          </TouchableOpacity>
-                        }
-                      >
-                        {(() => {
-                          const units = ['Stück', 'Palette', 'Paket'];
-                          if (selectedProduct?.unit && !units.includes(selectedProduct.unit)) {
-                            units.push(selectedProduct.unit);
-                          }
-                          return units.map((unit) => (
-                            <Menu.Item
-                              key={unit}
-                              onPress={() => {
-                                setSelectedUnit(unit);
-                                setUnitMenuVisible(false);
-                                setCurrentItemIndexForProductSelection(null);
-                              }}
-                              title={unit}
-                              titleStyle={styles.menuItemText}
-                            />
-                          ));
-                        })()}
-                      </Menu>
-                    </View>
-                  )}
-                </View>
-              </View>
-            )}
-
-            {/* Entsorgungsgrund - nur bei Entsorgung */}
-            {warenausgangstyp === 'Entsorgung' && (
-              <View style={styles.formField}>
-                <Paragraph style={styles.fieldLabel}>Entsorgungsgrund:</Paragraph>
-                <View style={styles.dropdownContainer}>
-                  <TouchableOpacity
-                    style={styles.dropdownButton}
-                    onPress={() => setAuswahlGrundDialogVisible(true)}
-                  >
-                    <Paragraph style={styles.dropdownText}>
-                      {auswahlGrund || 'Entsorgungsgrund wählen'}
-                    </Paragraph>
-                    <IconButton icon="chevron-down" size={20} iconColor={BRAND_DARK_BLUE} />
-                  </TouchableOpacity>
-                </View>
-              </View>
-            )}
-
-            {/* Lagerort - Bei "Lager" zwei Felder: Von Lagerort und Nach Lagerort */}
-            {warenausgangstyp === 'Lager' ? (
-              <>
-                {/* Von Lagerort */}
-                <View style={styles.formField}>
-                  <Paragraph style={styles.fieldLabel}>Von Lagerort:</Paragraph>
-                  {userLocations.length > 1 ? (
-                    <View style={styles.dropdownContainer}>
-                      <TouchableOpacity
-                        style={styles.dropdownButton}
-                        onPress={() => {
-                          setVonLagerortDialogVisible(true);
-                        }}
-                      >
-                        <Paragraph style={styles.dropdownText}>{vonLagerort || lagerort || 'Lagerort auswählen'}</Paragraph>
-                        <IconButton icon="chevron-down" size={20} iconColor={BRAND_DARK_BLUE} />
-                      </TouchableOpacity>
-                    </View>
-                  ) : (
+            {/* Anzahl und Einheit - nicht bei Projekt */}
+            {warenausgangstyp !== 'Projekt' && (
+            <View style={styles.formField}>
+              <View style={styles.quantityAndUnitRow}>
+                <View style={styles.quantitySection}>
+                  <Paragraph style={styles.fieldLabel}>Anzahl:</Paragraph>
+                  <View style={styles.quantityContainer}>
+                    <IconButton
+                      icon="minus"
+                      mode="contained"
+                      size={20}
+                      onPress={decrementAnzahl}
+                      style={styles.quantityButton}
+                      iconColor="white"
+                    />
                     <TextInput
-                      style={styles.textInput}
-                      value={vonLagerort || lagerort}
-                      onChangeText={(text) => {
-                        setVonLagerort(text);
-                        setLagerort(text);
-                      }}
+                      style={styles.quantityInput}
+                      value={anzahl.toString()}
+                      onChangeText={handleAnzahlTextChange}
                       mode="outlined"
                       dense
-                      placeholder="Von Lagerort"
-                      editable={userLocations.length === 0}
+                      keyboardType="numeric"
+                      selectTextOnFocus
                     />
+                    <IconButton
+                      icon="plus"
+                      mode="contained"
+                      size={20}
+                      onPress={incrementAnzahl}
+                      style={styles.quantityButton}
+                      iconColor="white"
+                    />
+                  </View>
+                  
+                  {/* Lagerbestands-Anzeige */}
+                  {selectedProduct && (
+                    <View style={styles.stockInfoContainer}>
+                      <Paragraph style={[
+                        styles.stockInfoText,
+                        anzahl > selectedProduct.stockQuantity && styles.stockExceededText
+                      ]}>
+                        Verfügbar: {selectedProduct.stockQuantity} Stück
+                        {anzahl > selectedProduct.stockQuantity && ' ⚠️ Überschritten!'}
+                      </Paragraph>
+                    </View>
                   )}
                 </View>
                 
-                {/* Nach Lagerort */}
-                <View style={styles.formField}>
-                  <Paragraph style={styles.fieldLabel}>Nach Lagerort:</Paragraph>
-                  {allLocations.length > 0 ? (
-                    <View style={styles.dropdownContainer}>
-                      <TouchableOpacity
-                        style={styles.dropdownButton}
-                        onPress={() => setNachLagerortDialogVisible(true)}
-                      >
-                        <Paragraph style={styles.dropdownText}>{nachLagerort || 'Lagerort auswählen'}</Paragraph>
-                        <IconButton icon="chevron-down" size={20} iconColor={BRAND_DARK_BLUE} />
-                      </TouchableOpacity>
-                    </View>
-                  ) : (
-                    <TextInput
-                      style={styles.textInput}
-                      value={nachLagerort}
-                      onChangeText={setNachLagerort}
-                      mode="outlined"
-                      dense
-                      placeholder="Nach Lagerort"
-                      editable={true}
-                    />
-                  )}
-                </View>
-              </>
-            ) : (
-              /* Normales Lagerort-Feld für andere Warenausgangstypen */
-              <View style={styles.formField}>
-                <Paragraph style={styles.fieldLabel}>Lagerort:</Paragraph>
-                {userLocations.length > 1 ? (
-                  // Mehrere Lagerorte - Dropdown anzeigen
-                  <View style={styles.dropdownContainer}>
+                {selectedProduct && (
+                  <View style={styles.unitSection}>
+                    <Paragraph style={styles.fieldLabel}>Einheit:</Paragraph>
                     <TouchableOpacity
-                      style={styles.dropdownButton}
-                      onPress={() => setLagerortDialogVisible(true)}
+                      style={styles.unitDropdownButton}
+                      onPress={() => setUnitDialogVisible(true)}
                     >
-                      <Paragraph style={styles.dropdownText}>{lagerort || 'Lagerort auswählen'}</Paragraph>
-                      <IconButton icon="chevron-down" size={20} iconColor={BRAND_DARK_BLUE} />
+                      <Paragraph style={styles.unitDropdownText}>
+                        {selectedUnit || 'Einheit wählen'}
+                      </Paragraph>
+                      <MaterialCommunityIcons 
+                        name="chevron-down" 
+                        size={20} 
+                        color={BRAND_DARK_BLUE} 
+                      />
                     </TouchableOpacity>
                   </View>
-                ) : (
-                  // Ein oder kein Lagerort - TextInput (disabled wenn automatisch gesetzt)
-                  <TextInput
-                    style={styles.textInput}
-                    value={lagerort}
-                    onChangeText={setLagerort}
-                    mode="outlined"
-                    dense
-                    placeholder="Lagerort"
-                    editable={userLocations.length === 0}
-                  />
                 )}
               </View>
+            </View>
             )}
 
-            {/* Bemerkung - nicht bei Projekt */}
-            {warenausgangstyp !== 'Projekt' && (
-              <View style={styles.formField}>
-                <Paragraph style={styles.fieldLabel}>Bemerkung:</Paragraph>
+            {/* Entsorgungsgrund */}
+            <View style={styles.formField}>
+              <Paragraph style={styles.fieldLabel}>Entsorgungsgrund:</Paragraph>
+              <TouchableOpacity
+                style={styles.unitDropdownButton}
+                onPress={() => setAuswahlGrundDialogVisible(true)}
+              >
+                <Paragraph style={styles.unitDropdownText}>
+                  {auswahlGrund || 'Entsorgungsgrund wählen'}
+                </Paragraph>
+                <MaterialCommunityIcons
+                  name="chevron-down"
+                  size={20}
+                  color={BRAND_DARK_BLUE}
+                />
+              </TouchableOpacity>
+            </View>
+
+            {/* Lagerort */}
+            <View style={styles.formField}>
+              <Paragraph style={styles.fieldLabel}>Lageort:</Paragraph>
+              {userLocations.length > 1 ? (
+                // Mehrere Lagerorte - Dropdown anzeigen
+                <View style={styles.dropdownContainer}>
+                  <TouchableOpacity
+                    style={styles.dropdownButton}
+                    onPress={() => setLagerortDialogVisible(true)}
+                  >
+                    <Paragraph style={styles.dropdownText}>{lagerort || 'Lagerort auswählen'}</Paragraph>
+                    <IconButton icon="chevron-down" size={20} iconColor={BRAND_DARK_BLUE} />
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                // Ein oder kein Lagerort - TextInput (disabled wenn automatisch gesetzt)
                 <TextInput
                   style={styles.textInput}
-                  value={bemerkung}
-                  onChangeText={setBemerkung}
-                  placeholder="Bemerkung (optional)"
+                  value={lagerort}
+                  onChangeText={setLagerort}
                   mode="outlined"
                   dense
-                  multiline
-                  numberOfLines={3}
+                  placeholder="Lagerort"
+                  editable={userLocations.length === 0}
                 />
-              </View>
-            )}
+              )}
+            </View>
 
             {/* Begründung für negative Lager */}
             {showBegruendungField && (
@@ -1655,26 +1127,40 @@ const WarenausgaengeScreen: React.FC = () => {
               </View>
             )}
 
+            {/* Submit Button */}
+            <Button
+              mode="contained"
+              onPress={handleSubmit}
+              loading={submitting}
+              disabled={submitting}
+              style={styles.submitButton}
+              labelStyle={styles.submitButtonLabel}
+            >
+              Buchung abschließen
+            </Button>
           </Card.Content>
         </Card>
-      </View>
 
-        {/* Bodybereich - scrollbar */}
-        <Card style={styles.bodyCard}>
+        {/* Historie */}
+        <Card style={styles.historyCard}>
           <Card.Content>
-            {/* Titel mit Warenausgangstyp - nur anzeigen wenn Artikel vorhanden */}
-            {items.length > 0 && warenausgangstyp && (
-              <View style={styles.bodyTitleContainer}>
-                <Title style={styles.bodyTitle}>
-                  {warenausgangstyp}
-                </Title>
-              </View>
+            <Title style={styles.historyTitle}>Letzte Warenausgänge</Title>
+            {warenausgaenge.length === 0 ? (
+              <Paragraph style={styles.emptyText}>
+                Noch keine Warenausgänge vorhanden.
+              </Paragraph>
+            ) : (
+              <FlatList
+                data={warenausgaenge.slice(0, 5)} // Show only last 5
+                renderItem={renderWarenausgang}
+                keyExtractor={(item) => item.id.toString()}
+                scrollEnabled={false}
+              />
             )}
-            {/* Artikel-Liste */}
-            {renderItemForms()}
           </Card.Content>
         </Card>
       </ScrollView>
+
 
       {/* Vollbild-Modal für Produktliste */}
       <Modal
@@ -1841,63 +1327,9 @@ const WarenausgaengeScreen: React.FC = () => {
               ))}
             </RadioButton.Group>
           </Dialog.Content>
-        </Dialog>
-      </Portal>
-
-      {/* Von Lagerort Selection Dialog */}
-      <Portal>
-        <Dialog 
-          visible={vonLagerortDialogVisible} 
-          onDismiss={() => {
-            setVonLagerortDialogVisible(false);
-          }}
-        >
-          <Dialog.Title>Von Lagerort wählen</Dialog.Title>
-          <Dialog.Content>
-            <RadioButton.Group 
-              onValueChange={(value) => {
-                setVonLagerort(value);
-                setLagerort(value);
-                setVonLagerortDialogVisible(false);
-              }} 
-              value={vonLagerort || lagerort}
-            >
-              {userLocations.map((location, index) => (
-                <RadioButton.Item key={index} label={location} value={location} />
-              ))}
-            </RadioButton.Group>
-          </Dialog.Content>
-        </Dialog>
-      </Portal>
-
-      {/* Nach Lagerort Selection Dialog */}
-      <Portal>
-        <Dialog 
-          visible={nachLagerortDialogVisible} 
-          onDismiss={() => {
-            setNachLagerortDialogVisible(false);
-          }}
-        >
-          <Dialog.Title>Nach Lagerort wählen</Dialog.Title>
-          <Dialog.Content>
-            <ScrollView style={styles.dialogScrollArea}>
-              <RadioButton.Group 
-                onValueChange={(value) => {
-                  setNachLagerort(value);
-                  setNachLagerortDialogVisible(false);
-                }} 
-                value={nachLagerort}
-              >
-                {allLocations
-                  .filter(location => 
-                    location !== (vonLagerort || lagerort)
-                  )
-                .map((location, index) => (
-                  <RadioButton.Item key={index} label={location} value={location} />
-                ))}
-            </RadioButton.Group>
-            </ScrollView>
-          </Dialog.Content>
+          <Dialog.Actions>
+            <Button onPress={() => setLagerortDialogVisible(false)}>Schließen</Button>
+          </Dialog.Actions>
         </Dialog>
       </Portal>
 
@@ -1915,6 +1347,29 @@ const WarenausgaengeScreen: React.FC = () => {
               ))}
             </RadioButton.Group>
           </Dialog.Content>
+          <Dialog.Actions>
+            <Button onPress={() => setAuswahlGrundDialogVisible(false)}>Schließen</Button>
+          </Dialog.Actions>
+        </Dialog>
+      </Portal>
+
+      {/* Unit Selection Dialog */}
+      <Portal>
+        <Dialog visible={unitDialogVisible} onDismiss={() => setUnitDialogVisible(false)}>
+          <Dialog.Title>Einheit wählen</Dialog.Title>
+          <Dialog.Content>
+            <RadioButton.Group onValueChange={(value) => {
+              setSelectedUnit(value);
+              setUnitDialogVisible(false);
+            }} value={selectedUnit}>
+              {getAvailableUnits().map((unit) => (
+                <RadioButton.Item key={unit} label={unit} value={unit} />
+              ))}
+            </RadioButton.Group>
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button onPress={() => setUnitDialogVisible(false)}>Schließen</Button>
+          </Dialog.Actions>
         </Dialog>
       </Portal>
 
@@ -2019,13 +1474,8 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
     marginTop: 8,
   },
-  mainScrollView: {
-    flex: 1,
-  },
-  scrollViewContent: {
-    paddingBottom: 16,
-  },
   formContainer: {
+    flex: 1,
     padding: 16,
   },
   formCard: {
@@ -2044,7 +1494,7 @@ const styles = StyleSheet.create({
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 2,
+    gap: 4,
   },
   textInput: {
     flex: 1,
@@ -2052,14 +1502,11 @@ const styles = StyleSheet.create({
   },
   artikelnummerInput: {
     flex: 1,
-    minWidth: 200,
     backgroundColor: 'white',
   },
   iconButton: {
     margin: 0,
-    padding: 2,
-    width: 36,
-    height: 36,
+    padding: 4,
   },
   barcodeButton: {
     backgroundColor: BRAND_LIGHT_BLUE,
@@ -2084,7 +1531,7 @@ const styles = StyleSheet.create({
   quantityInput: {
     width: 80,
     textAlign: 'center',
-    marginHorizontal: 4,
+    marginHorizontal: 16,
     backgroundColor: 'white',
   },
   quantityAndUnitRow: {
@@ -2131,6 +1578,15 @@ const styles = StyleSheet.create({
   submitButtonLabel: {
     fontSize: 16,
     fontWeight: 'bold',
+  },
+  historyCard: {
+    elevation: 2,
+  },
+  historyTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 16,
   },
   warenausgangCard: {
     marginBottom: 12,
@@ -2534,116 +1990,6 @@ const styles = StyleSheet.create({
     color: 'white',
     textAlign: 'center',
     fontSize: 16,
-  },
-  // Sticky Bar Styles
-  stickyBar: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: '#fff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#e0e0e0',
-    elevation: 3,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 4,
-    zIndex: 1000,
-  },
-  stickyBarContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#e0e0e0',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-  },
-  searchInput: {
-    flex: 1,
-    backgroundColor: '#fff',
-    marginRight: 0,
-    marginBottom: 0,
-  },
-  stickyIconButton: {
-    margin: 0,
-  },
-  stickyAddButton: {
-    margin: 0,
-  },
-  dialogSearchInput: {
-    marginBottom: 16,
-    backgroundColor: 'white',
-  },
-  dialogScrollArea: {
-    maxHeight: 300,
-  },
-  // Body-Bereich Styles
-  bodyCard: {
-    margin: 16,
-    marginTop: 0,
-    elevation: 2,
-  },
-  bodyTitleContainer: {
-    marginBottom: 16,
-    paddingBottom: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e0e0e0',
-  },
-  bodyTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: BRAND_DARK_BLUE,
-    textAlign: 'center',
-  },
-  emptyState: {
-    padding: 32,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  emptyStateText: {
-    fontSize: 16,
-    color: '#666',
-    textAlign: 'center',
-    marginBottom: 16,
-  },
-  addButton: {
-    borderRadius: 8,
-  },
-  itemFormCard: {
-    marginBottom: 16,
-    elevation: 2,
-  },
-  itemHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  itemHeaderButtons: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  itemTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: BRAND_DARK_BLUE,
-    flex: 1,
-  },
-  quantityAndUnitContainer: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 24,
-  },
-  columnContainer: {
-    flex: 1,
-    flexDirection: 'column',
-    alignItems: 'flex-start',
-  },
-  menuItemText: {
-    fontSize: 16,
-    color: '#333',
   },
 });
 
