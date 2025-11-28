@@ -15,7 +15,6 @@ import { Provider as PaperProvider } from 'react-native-paper';
 import { paperTheme, navigationColors } from './src/theme';
 
 import LoginScreen from './src/screens/LoginScreen';
-import RegisterScreen from './src/screens/RegisterScreen';
 import MainScreen from './src/screens/MainScreen';
 import ProfileScreen from './src/screens/ProfileScreen';
 import ProjectMaterialsScreen from './src/screens/ProjectMaterialsScreen';
@@ -29,7 +28,6 @@ const Stack = createStackNavigator<RootStackParamList>();
 export default function App() {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [showRegister, setShowRegister] = useState(false);
 
   useEffect(() => {
     initializeApp();
@@ -75,23 +73,10 @@ export default function App() {
 
   const handleLoginSuccess = () => {
     setIsAuthenticated(true);
-    setShowRegister(false);
   };
 
   const handleLogout = () => {
     setIsAuthenticated(false);
-  };
-
-  const handleNavigateToRegister = () => {
-    setShowRegister(true);
-  };
-
-  const handleNavigateToLogin = () => {
-    setShowRegister(false);
-  };
-
-  const handleRegisterSuccess = () => {
-    setShowRegister(false);
   };
 
   if (isLoading) {
@@ -155,29 +140,14 @@ export default function App() {
         />
             </>
           ) : (
-            <>
-              {showRegister ? (
-                <Stack.Screen name="Register">
-                  {(props) => (
-                    <RegisterScreen
-                      {...props}
-                      onRegisterSuccess={handleRegisterSuccess}
-                      onNavigateToLogin={handleNavigateToLogin}
-                    />
-                  )}
-                </Stack.Screen>
-              ) : (
-                <Stack.Screen name="Login">
-                  {(props) => (
-                    <LoginScreen
-                      {...props}
-                      onLoginSuccess={handleLoginSuccess}
-                      onNavigateToRegister={handleNavigateToRegister}
-                    />
-                  )}
-                </Stack.Screen>
+            <Stack.Screen name="Login">
+              {(props) => (
+                <LoginScreen
+                  {...props}
+                  onLoginSuccess={handleLoginSuccess}
+                />
               )}
-            </>
+            </Stack.Screen>
           )}
         </Stack.Navigator>
       </NavigationContainer>

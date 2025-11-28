@@ -31,12 +31,10 @@ import { LoginRequest } from '../types';
 
 interface LoginScreenProps {
   onLoginSuccess: () => void;
-  onNavigateToRegister: () => void;
 }
 
 const LoginScreen: React.FC<LoginScreenProps> = ({
   onLoginSuccess,
-  onNavigateToRegister,
 }) => {
   const [credentials, setCredentials] = useState<LoginRequest>({
     username: 'admin',
@@ -195,15 +193,6 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
               >
                 {loading ? 'Anmeldung...' : 'Anmelden'}
               </Button>
-
-              <Button
-                mode="text"
-                onPress={onNavigateToRegister}
-                style={styles.registerButton}
-                disabled={loading}
-              >
-                Neuen Account erstellen
-              </Button>
             </Card.Content>
           </Card>
         </View>
@@ -227,9 +216,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   card: {
-    elevation: 4,
+    marginBottom: 12,
+    elevation: 1,
     borderRadius: 12,
-    marginTop: -30,
+    backgroundColor: 'white',
   },
   logoContainer: {
     alignItems: 'center',
@@ -284,9 +274,6 @@ const styles = StyleSheet.create({
     marginTop: 8,
     marginBottom: 16,
     paddingVertical: 8,
-  },
-  registerButton: {
-    marginTop: 8,
   },
 });
 

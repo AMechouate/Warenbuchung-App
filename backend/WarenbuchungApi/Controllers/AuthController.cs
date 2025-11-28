@@ -79,61 +79,6 @@ namespace WarenbuchungApi.Controllers
             return Ok(response);
         }
 
-        [HttpPost("register")]
-        public async Task<ActionResult<AuthResponseDto>> Register(RegisterDto registerDto)
-        {
-            if (await _context.Users.AnyAsync(u => u.Username == registerDto.Username))
-            {
-                return BadRequest("Username already exists");
-            }
-
-            if (await _context.Users.AnyAsync(u => u.Email == registerDto.Email))
-            {
-                return BadRequest("Email already exists");
-            }
-
-            var user = new User
-            {
-                Username = registerDto.Username,
-                Email = registerDto.Email,
-                PasswordHash = BCrypt.Net.BCrypt.HashPassword(registerDto.Password),
-                FirstName = registerDto.FirstName,
-                LastName = registerDto.LastName,
-                IsActive = true,
-                CreatedAt = DateTime.UtcNow
-            };
-
-            _context.Users.Add(user);
-            await _context.SaveChangesAsync();
-
-            var token = GenerateJwtToken(user);
-
-            var response = new AuthResponseDto
-            {
-                Token = token,
-                Expires = DateTime.UtcNow.AddHours(24),
-                User = new UserDto
-                {
-                    Id = user.Id,
-                    Username = user.Username,
-                    Email = user.Email,
-                    FirstName = user.FirstName,
-                    LastName = user.LastName,
-                    IsActive = user.IsActive,
-                    IsAdmin = user.IsAdmin,
-                    CreatedAt = user.CreatedAt,
-                    LastLoginAt = user.LastLoginAt,
-                    Locations = string.IsNullOrEmpty(user.Locations) 
-                        ? new List<string>() 
-                        : user.Locations.Split(',', StringSplitOptions.RemoveEmptyEntries)
-                            .Select(l => l.Trim())
-                            .ToList()
-                }
-            };
-
-            return CreatedAtAction(nameof(Login), response);
-        }
-
         [HttpGet("me")]
         [Microsoft.AspNetCore.Authorization.Authorize]
         public async Task<ActionResult<UserDto>> GetCurrentUser()

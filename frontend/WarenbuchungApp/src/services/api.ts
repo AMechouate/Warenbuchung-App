@@ -4,7 +4,6 @@ import { API_BASE_URL } from '../../config';
 import {
   AuthResponse,
   LoginRequest,
-  RegisterRequest,
   Product,
   CreateProductRequest,
   UpdateProductRequest,
@@ -86,17 +85,6 @@ class ApiService {
   // Auth methods
   async login(credentials: LoginRequest): Promise<AuthResponse> {
     const response: AxiosResponse<AuthResponse> = await this.api.post('/auth/login', credentials);
-    const { token, user } = response.data;
-    
-    // Store token and user data
-    await SecureStore.setItemAsync('auth_token', token);
-    await SecureStore.setItemAsync('user_data', JSON.stringify(user));
-    
-    return response.data;
-  }
-
-  async register(userData: RegisterRequest): Promise<AuthResponse> {
-    const response: AxiosResponse<AuthResponse> = await this.api.post('/auth/register', userData);
     const { token, user } = response.data;
     
     // Store token and user data

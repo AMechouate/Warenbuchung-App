@@ -4,14 +4,6 @@ export interface LoginRequest {
   password: string;
 }
 
-export interface RegisterRequest {
-  username: string;
-  email: string;
-  password: string;
-  firstName?: string;
-  lastName?: string;
-}
-
 export interface AuthResponse {
   token: string;
   expires: string;
@@ -230,7 +222,6 @@ export interface Booking {
 // Navigation Types
 export type RootStackParamList = {
   Login: undefined;
-  Register: undefined;
   Main: undefined;
   Profile: undefined;
   ProjectMaterials: { project: { id: number; name: string; description: string; status: string; startDate: string; endDate: string; } };
