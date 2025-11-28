@@ -6,7 +6,7 @@
  * @email adam.mechouate7@gmail.com
  * @date 2025-11-06
  */
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   StyleSheet,
@@ -44,16 +44,62 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
   });
   const [loading, setLoading] = useState(false);
   const [apiStatus, setApiStatus] = useState<string>('Testing...');
+  const statusRef = useRef<string>('Testing...');
 
   useEffect(() => {
+    let isMounted = true;
+    
     // Test API connection on component mount
     const testApi = async () => {
       console.log('🚀 LoginScreen: Testing API connection...');
-      const isConnected = await apiService.testConnection();
-      setApiStatus(isConnected ? '✅ Connected' : '❌ Failed');
+      if (isMounted) {
+        setApiStatus('Testing...');
+        statusRef.current = 'Testing...';
+      }
+      try {
+        const isConnected = await apiService.testConnection();
+        if (isMounted) {
+          const newStatus = isConnected ? '✅ Connected' : '❌ Failed';
+          setApiStatus(newStatus);
+          statusRef.current = newStatus;
+        }
+      } catch (error) {
+        console.error('Error testing API connection:', error);
+        if (isMounted) {
+          setApiStatus('❌ Failed');
+          statusRef.current = '❌ Failed';
+        }
+      }
     };
     
     testApi();
+    
+    // Retry connection test every 5 seconds if failed
+    const interval = setInterval(async () => {
+      if (!isMounted) return;
+      
+      const currentStatus = statusRef.current;
+      if (currentStatus === '❌ Failed' || currentStatus === 'Testing...') {
+        try {
+          const isConnected = await apiService.testConnection();
+          if (isMounted) {
+            const newStatus = isConnected ? '✅ Connected' : '❌ Failed';
+            setApiStatus(newStatus);
+            statusRef.current = newStatus;
+          }
+        } catch (error) {
+          if (isMounted) {
+            setApiStatus('❌ Failed');
+            statusRef.current = '❌ Failed';
+          }
+        }
+      }
+    }, 5000);
+    
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
   }, []);
 
   const handleLogin = async () => {

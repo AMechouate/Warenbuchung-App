@@ -1,13 +1,6 @@
-/**
- * api.ts
- * 
- * @author Adam Mechouate
- * @company OPTIMI Solutions GmbH
- * @email adam.mechouate7@gmail.com
- * @date 2025-11-06
- */
 import axios, { AxiosInstance, AxiosResponse } from 'axios';
 import * as SecureStore from 'expo-secure-store';
+import { API_BASE_URL } from '../../config';
 import {
   AuthResponse,
   LoginRequest,
@@ -21,18 +14,14 @@ import {
   Warenausgang,
   CreateWarenausgangRequest,
   UpdateWarenausgangRequest,
-  SettingsUser,
-  UserQueryParams,
-  OrderSummary,
-  OrderAssignment,
-  ProjectAssignment,
 } from '../types';
-import { API_BASE_URL } from '../../config';
 
 class ApiService {
   private api: AxiosInstance;
 
   constructor() {
+    // Debug: Zeige die verwendete API-URL
+    console.log('🔗 API Base URL:', API_BASE_URL);
     
     this.api = axios.create({
       baseURL: API_BASE_URL,
@@ -56,37 +45,42 @@ class ApiService {
       }
     );
 
-    // Response interceptor to handle auth errors
+    // Response interceptor to handle auth errors and network issues
     this.api.interceptors.response.use(
       (response) => response,
       async (error) => {
+        // Log network errors for debugging
+        if (error.code === 'ECONNREFUSED' || error.code === 'ENOTFOUND' || error.message?.includes('Network Error')) {
+          console.error('❌ Netzwerkfehler:', {
+            message: error.message,
+            code: error.code,
+            url: error.config?.url,
+            baseURL: error.config?.baseURL,
+          });
+        } else if (error.response) {
+          // Server responded with error status
+          console.error('❌ API Fehler:', {
+            status: error.response.status,
+            data: error.response.data,
+            url: error.config?.url,
+          });
+        } else {
+          // Request was made but no response received
+          console.error('❌ Keine Antwort vom Server:', {
+            message: error.message,
+            url: error.config?.url,
+            baseURL: error.config?.baseURL,
+          });
+        }
+
         if (error.response?.status === 401) {
-          // Don't clear storage immediately, let the app handle re-login
-          // This allows the user to manually log in again
+          // Token expired or invalid, clear storage
+          await SecureStore.deleteItemAsync('auth_token');
+          await SecureStore.deleteItemAsync('user_data');
         }
         return Promise.reject(error);
       }
     );
-  }
-
-  // Test connection
-  async testConnection(): Promise<boolean> {
-    try {
-      console.log('🔍 Testing API connection to:', this.api.defaults.baseURL);
-      const response = await this.api.get('/health', {
-        timeout: 5000, // 5 seconds timeout
-      });
-      console.log('✅ API connection successful:', response.status);
-      return response.status === 200;
-    } catch (error: any) {
-      console.error('❌ API connection failed:', {
-        message: error.message,
-        code: error.code,
-        baseURL: this.api.defaults.baseURL,
-        url: error.config?.url,
-      });
-      return false;
-    }
   }
 
   // Auth methods
@@ -124,17 +118,25 @@ class ApiService {
 
   async isAuthenticated(): Promise<boolean> {
     const token = await SecureStore.getItemAsync('auth_token');
-    if (!token) {
-      return false;
-    }
-    
-    // Test if token is still valid by making a simple API call
+    return !!token;
+  }
+
+  // Test backend connection
+  async testConnection(): Promise<boolean> {
     try {
-      await this.api.get('/auth/me');
-      return true;
-    } catch (error) {
-      // Clear invalid token
-      await this.logout();
+      console.log('🔍 Testing backend connection to:', API_BASE_URL);
+      const response = await this.api.get('/health', {
+        timeout: 5000, // Shorter timeout for connection test
+      });
+      console.log('✅ Backend connection successful:', response.data);
+      return response.status === 200 && response.data?.status === 'ok';
+    } catch (error: any) {
+      console.error('❌ Backend connection test failed:', {
+        message: error.message,
+        code: error.code,
+        response: error.response?.data,
+        url: API_BASE_URL,
+      });
       return false;
     }
   }
@@ -142,11 +144,6 @@ class ApiService {
   // Product methods
   async getProducts(): Promise<Product[]> {
     const response: AxiosResponse<Product[]> = await this.api.get('/products');
-    return response.data;
-  }
-
-  async searchProducts(query: string): Promise<Product[]> {
-    const response: AxiosResponse<Product[]> = await this.api.get(`/products/search?query=${encodeURIComponent(query)}`);
     return response.data;
   }
 
@@ -214,138 +211,6 @@ class ApiService {
 
   async deleteWarenausgang(id: number): Promise<void> {
     await this.api.delete(`/warenausgaenge/${id}`);
-  }
-
-  // Order methods
-  async getOrders(orderNumber?: string): Promise<OrderSummary[]> {
-    const params =
-      orderNumber && orderNumber.trim().length > 0
-        ? { orderNumber: orderNumber.trim() }
-        : undefined;
-    const response: AxiosResponse<any[]> = await this.api.get('/orders', {
-      params,
-    });
-    return response.data.map(order => ({
-      id: order.id ?? order.Id,
-      orderNumber: order.orderNumber ?? order.OrderNumber ?? '',
-      orderDate: order.orderDate ?? order.OrderDate ?? new Date().toISOString(),
-      status: order.status ?? order.Status,
-      supplier: order.supplier ?? order.Supplier ?? undefined,
-      supplierId: order.supplierId ?? order.SupplierId ?? undefined,
-      assignedItemCount:
-        order.assignedItemCount ?? order.AssignedItemCount ?? 0,
-      createdAt: order.createdAt ?? order.CreatedAt ?? new Date().toISOString(),
-      updatedAt: order.updatedAt ?? order.UpdatedAt ?? undefined,
-    }));
-  }
-
-  async getOrderAssignments(orderId: number): Promise<OrderAssignment[]> {
-    const response: AxiosResponse<any[]> = await this.api.get(`/orders/${orderId}/items`);
-    return response.data.map(assignment => ({
-      id: assignment.id ?? assignment.Id,
-      orderId: assignment.orderId ?? assignment.OrderId ?? orderId,
-      productId: assignment.productId ?? assignment.ProductId,
-      productName: assignment.productName ?? assignment.ProductName ?? '',
-      productSku: assignment.productSku ?? assignment.ProductSku ?? '',
-      defaultQuantity: assignment.defaultQuantity ?? assignment.DefaultQuantity ?? 0,
-      unit: assignment.unit ?? assignment.Unit ?? undefined,
-      createdAt: assignment.createdAt ?? assignment.CreatedAt ?? new Date().toISOString(),
-      updatedAt: assignment.updatedAt ?? assignment.UpdatedAt ?? undefined,
-    }));
-  }
-
-  async getProjectAssignments(projectKey: string): Promise<ProjectAssignment[]> {
-    if (!projectKey || projectKey.trim().length === 0) {
-      return [];
-    }
-
-    const response: AxiosResponse<any[]> = await this.api.get(
-      `/projects/${encodeURIComponent(projectKey.trim())}/items`
-    );
-
-    return response.data.map(assignment => ({
-      id: assignment.id ?? assignment.Id,
-      projectKey: assignment.projectKey ?? assignment.ProjectKey ?? projectKey,
-      productId: assignment.productId ?? assignment.ProductId,
-      productName: assignment.productName ?? assignment.ProductName ?? '',
-      productSku: assignment.productSku ?? assignment.ProductSku ?? '',
-      defaultQuantity: assignment.defaultQuantity ?? assignment.DefaultQuantity ?? 0,
-      unit: assignment.unit ?? assignment.Unit ?? undefined,
-      createdAt: assignment.createdAt ?? assignment.CreatedAt ?? new Date().toISOString(),
-      updatedAt: assignment.updatedAt ?? assignment.UpdatedAt ?? undefined,
-    }));
-  }
-
-  // Settings methods (Admin only)
-  async getUsers(params?: UserQueryParams): Promise<SettingsUser[]> {
-    const queryParams: Record<string, string | boolean> = {};
-
-    if (params?.search && params.search.trim().length > 0) {
-      queryParams.search = params.search.trim();
-    }
-
-    if (params?.role && params.role !== 'all') {
-      queryParams.role = params.role;
-    }
-
-    if (typeof params?.includeInactive === 'boolean' && !params.includeInactive) {
-      queryParams.includeInactive = params.includeInactive;
-    }
-
-    const response: AxiosResponse<SettingsUser[]> = await this.api.get('/settings/users', {
-      params: queryParams,
-    });
-    return response.data;
-  }
-
-  async createUser(userData: any): Promise<SettingsUser> {
-    const response: AxiosResponse<SettingsUser> = await this.api.post('/settings/users', userData);
-    return response.data;
-  }
-
-  async updateUser(id: number, userData: any): Promise<void> {
-    await this.api.put(`/settings/users/${id}`, userData);
-  }
-
-  async deleteUser(id: number): Promise<void> {
-    await this.api.delete(`/settings/users/${id}`);
-  }
-
-  async getReasons(): Promise<any[]> {
-    const response: AxiosResponse<any[]> = await this.api.get('/settings/reasons/all');
-    return response.data;
-  }
-
-  async createReason(reasonData: any): Promise<any> {
-    const response: AxiosResponse<any> = await this.api.post('/settings/reasons', reasonData);
-    return response.data;
-  }
-
-  async updateReason(id: number, reasonData: any): Promise<void> {
-    await this.api.put(`/settings/reasons/${id}`, reasonData);
-  }
-
-  async deleteReason(id: number): Promise<void> {
-    await this.api.delete(`/settings/reasons/${id}`);
-  }
-
-  async getJustifications(): Promise<any[]> {
-    // Use public endpoint for active justifications (no admin required)
-    const response: AxiosResponse<any[]> = await this.api.get('/settings/justifications');
-    return response.data;
-  }
-
-  async createJustification(templateData: any): Promise<any> {
-    const response: AxiosResponse<any> = await this.api.post('/settings/justifications', templateData);
-    return response.data;
-  }
-
-  async updateJustification(id: number, templateData: any): Promise<void> {
-    await this.api.put(`/settings/justifications/${id}`, templateData);
-  }
-
-  async deleteJustification(id: number): Promise<void> {
-    await this.api.delete(`/settings/justifications/${id}`);
   }
 }
 
