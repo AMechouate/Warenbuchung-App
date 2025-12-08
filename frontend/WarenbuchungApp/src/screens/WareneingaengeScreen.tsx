@@ -8,6 +8,7 @@ import {
   ScrollView,
   Modal,
   TouchableOpacity,
+  Text,
 } from 'react-native';
 import {
   Card,
@@ -19,6 +20,10 @@ import {
   Surface,
   TextInput,
   IconButton,
+  Dialog,
+  Portal,
+  RadioButton,
+  Searchbar,
 } from 'react-native-paper';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { apiService } from '../services/api';
@@ -39,6 +44,10 @@ const WareneingaengeScreen: React.FC = () => {
   const [artikelnummer, setArtikelnummer] = useState('');
   const [anzahl, setAnzahl] = useState(1);
   const [lagerort, setLagerort] = useState('');
+  const [userLagerort, setUserLagerort] = useState<string>('');
+  const [userLocations, setUserLocations] = useState<string[]>([]);
+  const [lagerortDialogVisible, setLagerortDialogVisible] = useState(false);
+  const [lieferant, setLieferant] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [erfassungstyp, setErfassungstyp] = useState('Bestellung');
   
@@ -49,8 +58,43 @@ const WareneingaengeScreen: React.FC = () => {
   const [orders, setOrders] = useState<any[]>([]);
   const [erfassungstypModalVisible, setErfassungstypModalVisible] = useState(false);
 
+  // Body area states - separate items for each Erfassungstyp
+  interface WareneingangItem {
+    id: string;
+    artikelnummer: string;
+    anzahl: string;
+    selectedProduct: any | null;
+    selectedUnit: string;
+    isSaved?: boolean;
+  }
+  // Store items per Erfassungstyp
+  const [itemsByErfassungstyp, setItemsByErfassungstyp] = useState<Record<string, WareneingangItem[]>>({});
+  const [productSearchQuery, setProductSearchQuery] = useState('');
+  const [allProducts, setAllProducts] = useState<any[]>([]);
+  const [productsModalVisible, setProductsModalVisible] = useState(false);
+  const [currentItemIndexForProductSelection, setCurrentItemIndexForProductSelection] = useState<number | null>(null);
+
+  // Get current items for active Erfassungstyp
+  const items = itemsByErfassungstyp[erfassungstyp] || [];
+
   // Erfassungstypen
   const erfassungstypen = ['Bestellung', 'Projekt (Baustelle)', 'Lager', 'Ohne Bestellung'];
+
+  // Get color for Erfassungstyp
+  const getErfassungstypColor = (typ: string) => {
+    switch (typ) {
+      case 'Bestellung':
+        return '#90CAF9';
+      case 'Projekt (Baustelle)':
+        return '#A5D6A7';
+      case 'Lager':
+        return '#FFF59D';
+      case 'Ohne Bestellung':
+        return '#FFCC80';
+      default:
+        return '#CCCCCC';
+    }
+  };
 
   const loadWareneingaenge = async () => {
     try {
@@ -87,11 +131,60 @@ const WareneingaengeScreen: React.FC = () => {
     }
   };
 
+  const loadUserLagerort = async () => {
+    try {
+      const user = await apiService.getStoredUser();
+      if (user && user.locations && user.locations.length > 0) {
+        setUserLocations(user.locations);
+        // Wenn User Locations hat
+        if (user.locations.length === 1) {
+          // Nur ein Lagerort - automatisch setzen
+          const singleLocation = user.locations[0];
+          setUserLagerort(singleLocation);
+          setLagerort(singleLocation);
+          console.log('🏢 Einziger Lagerort gesetzt:', singleLocation);
+        } else {
+          // Mehrere Lagerorte - ersten als Standard setzen, aber Dropdown zeigen
+          const firstLocation = user.locations[0];
+          setUserLagerort(firstLocation);
+          setLagerort(firstLocation);
+          console.log('🏢 Mehrere Lagerorte verfügbar:', user.locations);
+        }
+      } else {
+        // Kein Lagerort zugewiesen
+        setUserLocations([]);
+        setUserLagerort('');
+        setLagerort('');
+        console.log('🏢 Kein Lagerort für User zugewiesen');
+      }
+    } catch (error) {
+      console.error('❌ Fehler beim Laden des User-Lagerorts:', error);
+      setUserLocations([]);
+      setUserLagerort('');
+      setLagerort('');
+    }
+  };
+
   useFocusEffect(
     useCallback(() => {
       loadWareneingaenge();
+      loadUserLagerort(); // Lagerort des Benutzers laden
     }, [])
   );
+
+  // Helper function to update items for current Erfassungstyp
+  const updateItemsForCurrentTyp = (updater: (prev: WareneingangItem[]) => WareneingangItem[]) => {
+    setItemsByErfassungstyp(prev => ({
+      ...prev,
+      [erfassungstyp]: updater(prev[erfassungstyp] || [])
+    }));
+  };
+
+  // Reset search query when Erfassungstyp changes
+  useEffect(() => {
+    setProductSearchQuery('');
+    setCurrentItemIndexForProductSelection(null);
+  }, [erfassungstyp]);
 
   const onRefresh = () => {
     setRefreshing(true);
@@ -179,26 +272,306 @@ const WareneingaengeScreen: React.FC = () => {
     setOrdersModalVisible(false);
   };
 
-  const selectErfassungstyp = (typ: string) => {
-    setErfassungstyp(typ);
-    setErfassungstypModalVisible(false);
+  // Body area functions
+  const loadAllProducts = async () => {
+    try {
+      const products = await apiService.getProducts();
+      setAllProducts(products);
+      setProductsModalVisible(true);
+    } catch (error) {
+      console.error('Error loading products:', error);
+      Alert.alert('Fehler', 'Fehler beim Laden der Produkte');
+    }
   };
 
-  const renderErfassungstyp = ({ item }: { item: string }) => (
+  const selectProduct = (product: any) => {
+    // If we're selecting for a specific item in the list
+    if (currentItemIndexForProductSelection !== null) {
+      updateItemsForCurrentTyp((prevItems) => {
+        const newItems = [...prevItems];
+        newItems[currentItemIndexForProductSelection].selectedProduct = product;
+        newItems[currentItemIndexForProductSelection].artikelnummer = product.sku || '';
+        newItems[currentItemIndexForProductSelection].selectedUnit = product.unit || 'Stück';
+        return newItems;
+      });
+      setCurrentItemIndexForProductSelection(null);
+    }
+    
+    setProductsModalVisible(false);
+  };
+
+  // Add new item to the list
+  const addNewItem = useCallback(() => {
+    const newItem: WareneingangItem = {
+      id: `item-${Date.now()}-${Math.random()}`,
+      artikelnummer: '',
+      anzahl: '0',
+      selectedProduct: null,
+      selectedUnit: 'Stück',
+    };
+    updateItemsForCurrentTyp((prev) => [...prev, newItem]);
+  }, [erfassungstyp]);
+
+  // Save item function
+  const handleSaveItem = async (itemIndex: number) => {
+    const currentItems = itemsByErfassungstyp[erfassungstyp] || [];
+    const item = currentItems[itemIndex];
+    if (!item) {
+      return;
+    }
+
+    if (!item.selectedProduct) {
+      Alert.alert('Hinweis', `Bitte wählen Sie zuerst einen Artikel für Position ${itemIndex + 1} aus.`);
+      return;
+    }
+
+    const quantityValue = parseFloat(item.anzahl.replace(',', '.')) || 0;
+    if (quantityValue < 0) {
+      Alert.alert('Hinweis', `Die Anzahl darf nicht negativ sein für Position ${itemIndex + 1}.`);
+      return;
+    }
+
+    try {
+      // Markiere das Item als gespeichert
+      updateItemsForCurrentTyp((prevItems) => {
+        const newItems = [...prevItems];
+        newItems[itemIndex].isSaved = true;
+        return newItems;
+      });
+      
+      Alert.alert('Erfolg', `Artikel "${item.selectedProduct.name}" wurde gespeichert.`);
+    } catch (error) {
+      console.error('Error saving item:', error);
+      Alert.alert('Fehler', 'Artikel konnte nicht gespeichert werden.');
+    }
+  };
+
+  // Render item forms
+  const renderItemForms = () => {
+    if (items.length === 0) {
+      return (
+        <View style={styles.emptyState}>
+          <Paragraph style={styles.emptyStateText}>
+            Keine Artikel hinzugefügt. Klicken Sie auf '+ Artikel hinzufügen' um zu beginnen.
+          </Paragraph>
+          <Button
+            mode="contained"
+            icon="plus"
+            onPress={addNewItem}
+            style={[styles.addButton, { marginTop: 16 }]}
+            buttonColor={BRAND_LIGHT_BLUE}
+          >
+            Artikel hinzufügen
+          </Button>
+        </View>
+      );
+    }
+
+    return items.map((item, index) => {
+      const quantityValue = parseFloat(item.anzahl.replace(',', '.')) || 0;
+
+      return (
+        <Card key={item.id} style={styles.itemFormCard}>
+          <Card.Content>
+            <View style={styles.itemHeader}>
+              <Title style={styles.itemTitle}>
+                {item.selectedProduct?.name || `Artikel ${index + 1}`}
+              </Title>
+              <View style={styles.itemHeaderButtons}>
+                {item.isSaved ? (
+                  <Chip 
+                    mode="flat" 
+                    icon="check-circle" 
+                    style={styles.savedChip}
+                    textStyle={styles.savedChipText}
+                  >
+                    Gespeichert
+                  </Chip>
+                ) : (
+                  <IconButton
+                    icon="content-save"
+                    size={24}
+                    iconColor={
+                      quantityValue <= 0 || !item.selectedProduct
+                        ? '#9e9e9e'
+                        : BRAND_DARK_BLUE
+                    }
+                    disabled={quantityValue <= 0 || !item.selectedProduct}
+                    onPress={() => handleSaveItem(index)}
+                    style={styles.iconButton}
+                  />
+                )}
+                <IconButton
+                  icon="close"
+                  size={24}
+                  iconColor="#d32f2f"
+                  onPress={() => {
+                    Alert.alert(
+                      'Artikel löschen',
+                      `Möchten Sie wirklich "${item.selectedProduct?.name || `Artikel ${index + 1}`}" löschen?`,
+                      [
+                        { text: 'Abbrechen', style: 'cancel' },
+                        {
+                          text: 'Löschen',
+                          style: 'destructive',
+                          onPress: () => {
+                            updateItemsForCurrentTyp((prev) => prev.filter((_, i) => i !== index));
+                          },
+                        },
+                      ]
+                    );
+                  }}
+                  style={styles.iconButton}
+                />
+              </View>
+            </View>
+
+            {/* Artikelnummer */}
+            <View style={styles.formField}>
+              <Paragraph style={styles.fieldLabel}>Artikelnummer:</Paragraph>
+              <View style={styles.inputContainer}>
+                <TextInput
+                  style={styles.artikelnummerInput}
+                  value={item.artikelnummer}
+                  onChangeText={(text) => {
+                    updateItemsForCurrentTyp((prevItems) => {
+                      const newItems = [...prevItems];
+                      newItems[index].artikelnummer = text;
+                      return newItems;
+                    });
+                  }}
+                  placeholder="z.B. DELL-XPS13-001"
+                  mode="outlined"
+                  dense
+                  autoCapitalize="characters"
+                />
+                <IconButton
+                  icon="magnify"
+                  size={20}
+                  iconColor={BRAND_DARK_BLUE}
+                  onPress={async () => {
+                    try {
+                      if (allProducts.length === 0) {
+                        await loadAllProducts();
+                      }
+                      setCurrentItemIndexForProductSelection(index);
+                      setProductsModalVisible(true);
+                    } catch (error) {
+                      console.error('Error loading products:', error);
+                    }
+                  }}
+                  style={styles.iconButton}
+                />
+              </View>
+            </View>
+
+            {/* Anzahl und Einheit - nebeneinander */}
+            <View style={styles.formField}>
+              <View style={styles.quantityAndUnitContainer}>
+                {/* Anzahl Spalte */}
+                <View style={styles.columnContainer}>
+                  <Paragraph style={styles.fieldLabel}>Menge:</Paragraph>
+                  <View style={styles.quantityContainer}>
+                    <IconButton
+                      icon="minus"
+                      mode="contained"
+                      size={20}
+                      onPress={() => {
+                        updateItemsForCurrentTyp((prevItems) => {
+                          const newItems = [...prevItems];
+                          const current = parseFloat(newItems[index].anzahl.replace(',', '.')) || 0;
+                          const newValue = Math.max(0, current - 1);
+                          newItems[index].anzahl = Math.round(newValue).toString();
+                          return newItems;
+                        });
+                      }}
+                      style={styles.quantityButton}
+                      iconColor="white"
+                    />
+                    <TextInput
+                      style={styles.quantityInput}
+                      value={item.anzahl}
+                      onChangeText={(text) => {
+                        updateItemsForCurrentTyp((prevItems) => {
+                          const newItems = [...prevItems];
+                          const numericValue = parseFloat(text.replace(',', '.')) || 0;
+                          const clampedValue = Math.max(0, numericValue);
+                          newItems[index].anzahl = Math.round(clampedValue).toString();
+                          return newItems;
+                        });
+                      }}
+                      mode="outlined"
+                      dense
+                      keyboardType="numeric"
+                    />
+                    <IconButton
+                      icon="plus"
+                      mode="contained"
+                      size={20}
+                      onPress={() => {
+                        updateItemsForCurrentTyp((prevItems) => {
+                          const newItems = [...prevItems];
+                          const current = parseFloat(newItems[index].anzahl.replace(',', '.')) || 0;
+                          const newValue = current + 1;
+                          newItems[index].anzahl = Math.round(newValue).toString();
+                          return newItems;
+                        });
+                      }}
+                      style={styles.quantityButton}
+                      iconColor="white"
+                    />
+                  </View>
+                </View>
+
+                {/* Einheit Spalte - nur anzeigen wenn Produkt ausgewählt */}
+                {item.selectedProduct && (
+                  <View style={styles.columnContainer}>
+                    <Paragraph style={styles.fieldLabel}>Einheit:</Paragraph>
+                    <TextInput
+                      style={styles.textInput}
+                      value={item.selectedUnit || item.selectedProduct?.unit || 'Stück'}
+                      editable={false}
+                      mode="outlined"
+                      dense
+                    />
+                  </View>
+                )}
+              </View>
+            </View>
+          </Card.Content>
+        </Card>
+      );
+    });
+  };
+
+  const renderProduct = ({ item }: { item: any }) => (
     <TouchableOpacity
-      style={[
-        styles.erfassungstypOption,
-        erfassungstyp === item && styles.selectedErfassungstypOption
-      ]}
-      onPress={() => selectErfassungstyp(item)}
+      style={styles.productListItem}
+      onPress={() => selectProduct(item)}
     >
-      <Paragraph style={[
-        styles.erfassungstypOptionText,
-        erfassungstyp === item && styles.selectedErfassungstypOptionText
-      ]}>
-        {item}
+      <View style={styles.productListItemContent}>
+        <Paragraph style={styles.productListItemName}>{item.name}</Paragraph>
+        <Paragraph style={styles.productListItemSku}>SKU: {item.sku}</Paragraph>
+        {item.description && (
+          <Paragraph style={styles.productListItemDescription} numberOfLines={2}>
+            {item.description}
       </Paragraph>
+        )}
+        <View style={styles.productListItemDetails}>
+          <Paragraph style={styles.productListItemPrice}>
+            Preis: €{item.price.toFixed(2)}
+          </Paragraph>
+          <Paragraph style={styles.productListItemStock}>
+            Bestand: {item.stockQuantity} {item.unit || 'Stück'}
+          </Paragraph>
+        </View>
+      </View>
     </TouchableOpacity>
+  );
+
+  const filteredProducts = allProducts.filter(product => 
+    product.name.toLowerCase().includes(productSearchQuery.toLowerCase()) ||
+    product.sku.toLowerCase().includes(productSearchQuery.toLowerCase())
   );
 
   const renderOrder = ({ item }: { item: any }) => (
@@ -413,7 +786,7 @@ const WareneingaengeScreen: React.FC = () => {
 
   return (
     <View style={styles.container}>
-      <Surface style={styles.header}>
+      <Surface style={[styles.header, { backgroundColor: getErfassungstypColor(erfassungstyp) }]}>
         <Title style={styles.headerTitle}>Wareneingang buchen</Title>
         {!isOnline && (
           <Chip mode="outlined" icon="wifi-off" style={styles.offlineChip}>
@@ -422,39 +795,77 @@ const WareneingaengeScreen: React.FC = () => {
         )}
       </Surface>
 
-      <ScrollView style={styles.formContainer} showsVerticalScrollIndicator={false}>
+      {/* Sticky Search/Filter/Add Bar - immer sichtbar wenn Artikel vorhanden */}
+      {items.length > 0 && (
+        <View style={styles.stickyBar}>
+          <View style={styles.stickyBarContainer}>
+            <TextInput
+              style={styles.searchInput}
+              value={productSearchQuery}
+              onChangeText={setProductSearchQuery}
+              placeholder="Artikel suchen..."
+              mode="outlined"
+              dense
+              left={<TextInput.Icon icon="magnify" />}
+            />
+            <IconButton
+              icon="filter"
+              size={24}
+              iconColor={BRAND_DARK_BLUE}
+              onPress={() => {
+                // Filter functionality can be added here
+              }}
+              mode="contained-tonal"
+              containerColor="#eef2f7"
+              style={styles.stickyIconButton}
+            />
+            <IconButton
+              icon="plus"
+              size={24}
+              iconColor="#fff"
+              onPress={addNewItem}
+              mode="contained"
+              containerColor={BRAND_LIGHT_BLUE}
+              style={[styles.stickyIconButton, styles.stickyAddButton]}
+            />
+          </View>
+        </View>
+      )}
+
+      {/* Gesamter Inhalt scrollbar - Kopfbereich + Body-Bereich */}
+      <ScrollView 
+        style={styles.mainScrollView}
+        showsVerticalScrollIndicator={true}
+        contentContainerStyle={styles.scrollViewContent}
+      >
+        {/* Kopfbereich - vollständig sichtbar, nicht scrollbar */}
+        <View style={styles.formContainer}>
         {/* Formular */}
         <Card style={styles.formCard}>
           <Card.Content>
             {/* Erfassungstyp Dropdown */}
             <View style={styles.formField}>
               <Paragraph style={styles.fieldLabel}>Erfassungstyp:</Paragraph>
-              <View style={styles.dropdownContainer}>
                 <TouchableOpacity
                   style={styles.dropdownButton}
-                  onPress={() => {
-                    const actions = erfassungstypen.map(typ => ({
-                      text: typ,
-                      onPress: () => setErfassungstyp(typ),
-                    }));
-                    actions.push({
-                      text: 'Abbrechen',
-                      style: 'cancel' as const,
-                    });
-                    Alert.alert('Erfassungstyp wählen', 'Wählen Sie einen Erfassungstyp:', actions);
-                  }}
+                onPress={() => setErfassungstypModalVisible(true)}
+              >
+                <Paragraph
+                  style={[
+                    styles.dropdownText,
+                    erfassungstyp ? styles.dropdownTextSelected : null,
+                  ]}
                 >
-                  <Paragraph style={styles.dropdownText}>{erfassungstyp}</Paragraph>
+                  {erfassungstyp || 'Erfassungstyp wählen'}
+                </Paragraph>
                   <IconButton icon="chevron-down" size={20} iconColor={BRAND_DARK_BLUE} />
                 </TouchableOpacity>
-              </View>
             </View>
 
-            {/* Bestellungsnummer - nur bei Bestellung */}
+            {/* Referenz (Bestellungsnummer) - nur bei Bestellung */}
             {erfassungstyp === 'Bestellung' && (
               <View style={styles.formField}>
-              <Paragraph style={styles.fieldLabel}>Bestellungsnummer:</Paragraph>
-              <View style={styles.inputContainer}>
+              <Paragraph style={styles.fieldLabel}>Referenz (Bestellungsnummer):</Paragraph>
                 <TextInput
                   style={styles.textInput}
                   value={bestellungsnummer}
@@ -467,129 +878,76 @@ const WareneingaengeScreen: React.FC = () => {
                   keyboardType="default"
                   returnKeyType="done"
                 />
-                <IconButton
-                  icon="magnify"
-                  size={24}
-                  iconColor={BRAND_LIGHT_BLUE}
-                  onPress={openSupplierSearch}
-                  style={styles.scanButton}
-                />
-              </View>
             </View>
             )}
-
-            {/* Artikelnummer */}
-            <View style={styles.formField}>
-              <Paragraph style={styles.fieldLabel}>Artikelnummer:</Paragraph>
-              <View style={styles.inputContainer}>
-                <TextInput
-                  style={styles.textInput}
-                  value={artikelnummer}
-                  onChangeText={setArtikelnummer}
-                  placeholder="z.B. DELL-XPS13-001"
-                  mode="outlined"
-                  dense
-                  autoCapitalize="characters"
-                  autoCorrect={false}
-                  keyboardType="default"
-                  returnKeyType="done"
-                />
-                <Button
-                  mode="contained"
-                  icon="barcode"
-                  onPress={openScanner}
-                  style={styles.barcodeButton}
-                  labelStyle={styles.barcodeButtonLabel}
-                >
-                  Scan
-                </Button>
-              </View>
-            </View>
-
-            {/* Anzahl */}
-            <View style={styles.formField}>
-              <Paragraph style={styles.fieldLabel}>Anzahl:</Paragraph>
-              <View style={styles.quantityContainer}>
-                <IconButton
-                  icon="minus"
-                  mode="contained"
-                  size={20}
-                  onPress={decrementAnzahl}
-                  style={styles.quantityButton}
-                  iconColor="white"
-                />
-                <TextInput
-                  style={styles.quantityInput}
-                  value={anzahl.toString()}
-                  onChangeText={handleAnzahlTextChange}
-                  mode="outlined"
-                  dense
-                  keyboardType="numeric"
-                  selectTextOnFocus
-                />
-                <IconButton
-                  icon="plus"
-                  mode="contained"
-                  size={20}
-                  onPress={incrementAnzahl}
-                  style={styles.quantityButton}
-                  iconColor="white"
-                />
-              </View>
-            </View>
 
             {/* Lagerort */}
             <View style={styles.formField}>
               <Paragraph style={styles.fieldLabel}>Lagerort:</Paragraph>
+              {userLocations.length > 1 ? (
+                // Mehrere Lagerorte - Dropdown anzeigen
+                <View style={styles.dropdownContainer}>
+                  <TouchableOpacity
+                    style={styles.dropdownButton}
+                    onPress={() => setLagerortDialogVisible(true)}
+                  >
+                    <Paragraph style={styles.dropdownText}>{lagerort || 'Lagerort auswählen'}</Paragraph>
+                    <IconButton icon="chevron-down" size={20} iconColor={BRAND_DARK_BLUE} />
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                // Ein oder kein Lagerort - TextInput (disabled wenn automatisch gesetzt)
+                <TextInput
+                  style={styles.textInput}
+                  value={lagerort}
+                  onChangeText={setLagerort}
+                  placeholder="z.B. Köln Lager S03"
+                  mode="outlined"
+                  dense
+                  autoCapitalize="words"
+                  autoCorrect={true}
+                  textContentType="location"
+                  keyboardType="default"
+                  returnKeyType="done"
+                  editable={userLocations.length === 0}
+                />
+              )}
+            </View>
+
+            {/* Lieferant */}
+            <View style={styles.formField}>
+              <Paragraph style={styles.fieldLabel}>Lieferant:</Paragraph>
               <TextInput
                 style={styles.textInput}
-                value={lagerort}
-                onChangeText={setLagerort}
-                placeholder="z.B. Köln Lager S03"
+                value={lieferant}
+                onChangeText={setLieferant}
+                placeholder="z.B. Lieferant Name"
                 mode="outlined"
                 dense
                 autoCapitalize="words"
                 autoCorrect={true}
-                textContentType="location"
                 keyboardType="default"
                 returnKeyType="done"
               />
             </View>
 
-            {/* Submit Button */}
-            <Button
-              mode="contained"
-              onPress={handleSubmit}
-              loading={submitting}
-              disabled={submitting}
-              style={styles.submitButton}
-              labelStyle={styles.submitButtonLabel}
-            >
-              Buchung abschließen
-            </Button>
           </Card.Content>
         </Card>
+      </View>
 
-
-        {/* Historie */}
-        <Card style={styles.historyCard}>
+        {/* Bodybereich - scrollbar */}
+        <Card style={styles.bodyCard}>
           <Card.Content>
-            <Title style={styles.historyTitle}>Letzte Wareneingänge</Title>
-            {wareneingaenge.length === 0 ? (
-              <Paragraph style={styles.emptyText}>
-                Noch keine Wareneingänge vorhanden.
-              </Paragraph>
-            ) : (
-              <FlatList
-                data={wareneingaenge.slice(0, 5)} // Show only last 5
-                renderItem={renderWareneingang}
-                keyExtractor={(item) => item.id.toString()}
-                scrollEnabled={false}
-                refreshControl={
-                  <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-                }
-              />
+            {/* Titel mit Erfassungstyp - nur anzeigen wenn Artikel vorhanden */}
+            {items.length > 0 && erfassungstyp && (
+              <View style={styles.bodyTitleContainer}>
+                <Title style={styles.bodyTitle}>
+                  {erfassungstyp}
+                </Title>
+              </View>
             )}
+            {/* Artikel-Liste */}
+            {renderItemForms()}
           </Card.Content>
         </Card>
       </ScrollView>
@@ -677,6 +1035,108 @@ const WareneingaengeScreen: React.FC = () => {
           </View>
         </View>
       </Modal>
+
+      {/* Erfassungstyp Selection Dialog */}
+      <Portal>
+        <Dialog visible={erfassungstypModalVisible} onDismiss={() => setErfassungstypModalVisible(false)}>
+          <Dialog.Title>Erfassungstyp wählen</Dialog.Title>
+          <Dialog.Content>
+            <RadioButton.Group
+              onValueChange={(value) => {
+                setErfassungstyp(value);
+                setErfassungstypModalVisible(false);
+              }}
+              value={erfassungstyp}
+            >
+              {erfassungstypen.map((typ) => (
+                <TouchableOpacity
+                  key={typ}
+                  style={[
+                    styles.erfassungstypOption,
+                    erfassungstyp === typ && styles.selectedErfassungstypOption,
+                  ]}
+                  onPress={() => {
+                    setErfassungstyp(typ);
+                    setErfassungstypModalVisible(false);
+                  }}
+                >
+                  <View style={styles.erfassungstypLabelContainer}>
+                    <View
+                      style={[
+                        styles.erfassungstypColorDot,
+                        { backgroundColor: getErfassungstypColor(typ) },
+                      ]}
+                    />
+                    <Text
+                      style={[
+                        styles.erfassungstypLabelText,
+                        erfassungstyp === typ && styles.selectedErfassungstypLabelText,
+                      ]}
+                    >
+                      {typ}
+                    </Text>
+                  </View>
+                  <RadioButton value={typ} />
+                </TouchableOpacity>
+              ))}
+            </RadioButton.Group>
+          </Dialog.Content>
+        </Dialog>
+      </Portal>
+
+      {/* Lagerort Selection Dialog */}
+      <Portal>
+        <Dialog visible={lagerortDialogVisible} onDismiss={() => setLagerortDialogVisible(false)}>
+          <Dialog.Title>Lagerort wählen</Dialog.Title>
+          <Dialog.Content>
+            <RadioButton.Group onValueChange={(value) => {
+              setLagerort(value);
+              setLagerortDialogVisible(false);
+            }} value={lagerort}>
+              {userLocations.map((location, index) => (
+                <RadioButton.Item key={index} label={location} value={location} />
+              ))}
+            </RadioButton.Group>
+          </Dialog.Content>
+        </Dialog>
+      </Portal>
+
+      {/* Produktauswahl Modal */}
+      <Modal
+        visible={productsModalVisible}
+        transparent={false}
+        animationType="slide"
+        onRequestClose={() => setProductsModalVisible(false)}
+      >
+        <View style={styles.fullScreenModalContainer}>
+          <View style={styles.fullScreenModalHeader}>
+            <Title style={styles.fullScreenModalTitle}>Artikel auswählen</Title>
+            <Paragraph style={styles.fullScreenModalSubtitle}>
+              Wählen Sie einen Artikel aus:
+            </Paragraph>
+          </View>
+          
+          <View style={styles.fullScreenModalContent}>
+            <FlatList
+              data={filteredProducts}
+              renderItem={renderProduct}
+              keyExtractor={(item) => item.id.toString()}
+              style={styles.fullScreenProductsList}
+              showsVerticalScrollIndicator={true}
+            />
+          </View>
+          
+          <View style={styles.fullScreenModalFooter}>
+            <Button
+              mode="outlined"
+              onPress={() => setProductsModalVisible(false)}
+              style={styles.fullScreenCancelButton}
+            >
+              Abbrechen
+            </Button>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 };
@@ -694,7 +1154,7 @@ const styles = StyleSheet.create({
   header: {
     padding: 16,
     elevation: 2,
-    backgroundColor: 'white',
+    backgroundColor: '#90CAF9', // Default color (Bestellung), will be overridden dynamically
   },
   headerTitle: {
     fontSize: 24,
@@ -706,8 +1166,13 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
     marginTop: 8,
   },
-  formContainer: {
+  mainScrollView: {
     flex: 1,
+  },
+  scrollViewContent: {
+    paddingBottom: 16,
+  },
+  formContainer: {
     padding: 16,
   },
   formCard: {
@@ -754,8 +1219,19 @@ const styles = StyleSheet.create({
   quantityInput: {
     width: 80,
     textAlign: 'center',
-    marginHorizontal: 16,
+    marginHorizontal: 4,
     backgroundColor: 'white',
+  },
+  artikelnummerInput: {
+    flex: 1,
+    minWidth: 200,
+    backgroundColor: 'white',
+  },
+  iconButton: {
+    margin: 0,
+    padding: 2,
+    width: 36,
+    height: 36,
   },
   submitButton: {
     backgroundColor: BRAND_LIGHT_BLUE,
@@ -765,15 +1241,6 @@ const styles = StyleSheet.create({
   submitButtonLabel: {
     fontSize: 16,
     fontWeight: 'bold',
-  },
-  historyCard: {
-    elevation: 2,
-  },
-  historyTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 16,
   },
   wareneingangCard: {
     marginBottom: 12,
@@ -915,6 +1382,242 @@ const styles = StyleSheet.create({
     height: 32,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  erfassungstypOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    marginBottom: 8,
+    backgroundColor: '#f5f5f5',
+  },
+  selectedErfassungstypOption: {
+    backgroundColor: BRAND_LIGHT_BLUE + '20',
+  },
+  erfassungstypLabelContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  erfassungstypColorDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    marginRight: 12,
+  },
+  erfassungstypLabelText: {
+    fontSize: 16,
+    color: '#333',
+  },
+  selectedErfassungstypLabelText: {
+    fontWeight: 'bold',
+    color: BRAND_DARK_BLUE,
+  },
+  dropdownTextSelected: {
+    color: BRAND_DARK_BLUE,
+    fontWeight: '500',
+  },
+  // Sticky Bar Styles
+  stickyBar: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e0e0e0',
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    zIndex: 1000,
+  },
+  stickyBarContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  searchInput: {
+    flex: 1,
+    backgroundColor: '#fff',
+    marginRight: 0,
+    marginBottom: 0,
+  },
+  stickyIconButton: {
+    margin: 0,
+  },
+  stickyAddButton: {
+    margin: 0,
+  },
+  // Body-Bereich Styles
+  bodyCard: {
+    margin: 16,
+    marginTop: 0,
+    elevation: 2,
+  },
+  bodyTitleContainer: {
+    marginBottom: 16,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e0e0e0',
+  },
+  bodyTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: BRAND_DARK_BLUE,
+    textAlign: 'center',
+  },
+  emptyState: {
+    padding: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptyStateText: {
+    fontSize: 16,
+    color: '#666',
+    textAlign: 'center',
+    marginBottom: 16,
+  },
+  addButton: {
+    borderRadius: 8,
+  },
+  itemFormCard: {
+    marginBottom: 16,
+    elevation: 2,
+  },
+  itemHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  itemHeaderButtons: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  itemTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: BRAND_DARK_BLUE,
+    flex: 1,
+  },
+  quantityAndUnitContainer: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 24,
+  },
+  columnContainer: {
+    flex: 1,
+    flexDirection: 'column',
+    alignItems: 'flex-start',
+  },
+  savedChip: {
+    backgroundColor: '#e8f5e9',
+    borderColor: '#4caf50',
+    borderWidth: 1,
+  },
+  savedChipText: {
+    color: '#2e7d32',
+    fontWeight: 'bold',
+  },
+  productListItem: {
+    backgroundColor: '#f8f9fa',
+    marginBottom: 8,
+    borderRadius: 8,
+    marginHorizontal: 16,
+  },
+  productListItemContent: {
+    padding: 16,
+  },
+  productListItemName: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 4,
+  },
+  productListItemSku: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 4,
+  },
+  productListItemDescription: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 8,
+  },
+  productListItemDetails: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 8,
+  },
+  productListItemPrice: {
+    fontSize: 14,
+    color: '#333',
+    fontWeight: '500',
+  },
+  productListItemStock: {
+    fontSize: 14,
+    color: '#333',
+  },
+  fullScreenModalContainer: {
+    flex: 1,
+    backgroundColor: '#f5f5f5',
+  },
+  fullScreenModalHeader: {
+    backgroundColor: 'white',
+    padding: 20,
+    paddingTop: 60,
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+  },
+  fullScreenModalTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: BRAND_DARK_BLUE,
+    textAlign: 'center',
+  },
+  fullScreenModalSubtitle: {
+    fontSize: 16,
+    color: '#666',
+    textAlign: 'center',
+    marginTop: 8,
+    marginBottom: 16,
+  },
+  modalSearchbar: {
+    marginTop: 16,
+    elevation: 0,
+  },
+  fullScreenModalContent: {
+    flex: 1,
+    padding: 16,
+  },
+  fullScreenProductsList: {
+    flex: 1,
+  },
+  fullScreenModalFooter: {
+    backgroundColor: 'white',
+    padding: 20,
+    borderTopWidth: 1,
+    borderTopColor: '#e0e0e0',
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+  },
+  fullScreenCancelButton: {
+    width: '100%',
+    borderColor: '#666',
   },
 });
 

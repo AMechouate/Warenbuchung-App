@@ -20,7 +20,7 @@ const USE_PHYSICAL_DEVICE = false;
 
 // Lokale IP-Adresse (für physische Geräte)
 // Finde deine IP mit: ifconfig | grep "inet " | grep -v 127.0.0.1
-const LOCAL_IP = '192.168.178.148';
+const LOCAL_IP = '192.168.8.131';
 
 // Backend Port
 const BACKEND_PORT = 5232;

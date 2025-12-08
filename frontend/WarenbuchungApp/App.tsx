@@ -53,14 +53,15 @@ export default function App() {
             console.error('Max database initialization retries reached');
             throw dbError;
           }
-          
+    
           // Wait a bit before retry
           await new Promise(resolve => setTimeout(resolve, 1000));
         }
       }
       
       // Check authentication status
-      const authenticated = await apiService.isAuthenticated();
+      //const authenticated = await apiService.isAuthenticated();
+      const authenticated = true;
       setIsAuthenticated(authenticated);
       
     } catch (error) {

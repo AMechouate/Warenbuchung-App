@@ -1,0 +1,35 @@
+# Database files
+*.db
+*.db.backup*
+warenbuchung.db
+
+# App settings (may contain sensitive data)
+**/appsettings.Development.json
+**/appsettings.Production.json
+
+# Backup files
+backup_*.tar.gz
+backup_*/
+
+# Backup files in frontend
+*.bak
+*.bak2
+
+# Build outputs
+**/bin/
+**/obj/
+
+# Node modules
+node_modules/
+
+# OS files
+.DS_Store
+*.swp
+*.swo
+
+# IDE files
+.vs/
+.idea/
+*.user
+*.suo
+
